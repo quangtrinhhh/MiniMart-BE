@@ -50,6 +50,9 @@ export class User {
   @Column()
   isActive: boolean;
 
+  @Column()
+  codeExpired: Date;
+
   @CreateDateColumn({ type: 'timestamp' })
   created_at: Date;
 
