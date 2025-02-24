@@ -1,11 +1,11 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 
 export const databaseConfig = (): TypeOrmModuleOptions => {
-  const host = process.env.DB_HOST || 'localhost'; // Giá trị mặc định nếu biến môi trường không có
-  const port = parseInt(process.env.DB_PORT || '5432', 10); // Cổng mặc định là 5432
-  const username = process.env.DB_USER || 'postgres';
-  const password = process.env.DB_PASS || '123456';
-  const database = process.env.DB_NAME || 'minimart_db';
+  const host = process.env.DB_HOST;
+  const port = parseInt(process.env.DB_PORT || '5432', 10);
+  const username = process.env.DB_USER;
+  const password = process.env.DB_PASS;
+  const database = process.env.DB_NAME;
 
   return {
     type: 'postgres',

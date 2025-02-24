@@ -50,7 +50,7 @@ export class User {
   @Column()
   isActive: boolean;
 
-  @Column()
+  @Column({ type: 'timestamp' })
   codeExpired: Date;
 
   @CreateDateColumn({ type: 'timestamp' })

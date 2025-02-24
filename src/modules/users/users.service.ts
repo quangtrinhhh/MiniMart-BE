@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  Injectable,
+} from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -6,14 +10,16 @@ import { User } from './entities/user.entity';
 import { Repository } from 'typeorm';
 import { hashPasswordHelper } from 'src/helpers/util';
 import { v4 as uuidv4 } from 'uuid';
-import { CreateAuthDto } from 'src/auth/dto/create-auth.dto';
+import { CodeAuthDto, CreateAuthDto } from 'src/auth/dto/create-auth.dto';
 import dayjs from 'dayjs';
+import { MailerService } from '@nestjs-modules/mailer';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private mailerService: MailerService,
   ) {}
   generate6DigitCode() {
     const uuid = uuidv4(); // Tạo UUID
@@ -81,6 +87,7 @@ export class UsersService {
       );
     }
     const hashedPassword = await hashPasswordHelper(password);
+    const codeID = this.generate6DigitCode();
     const user = this.userRepository.create({
       email,
       password: `${hashedPassword}`,
@@ -88,11 +95,47 @@ export class UsersService {
       first_name,
       phone_number,
       isActive: false,
-      code: this.generate6DigitCode(),
-      codeExpired: dayjs().add(15, 'minute'),
+      code: codeID,
+      codeExpired: dayjs().add(15, 'minute').toDate(),
     });
 
     await this.userRepository.save(user);
+
+    void this.mailerService.sendMail({
+      to: user.email,
+      subject: 'Acctivate your account at @minimart',
+      text: 'Hello World!',
+      template: 'register',
+      context: {
+        name:
+          user.first_name && user.last_name
+            ? `${user.first_name} ${user.last_name}`
+            : user.email,
+        activationCode: codeID,
+      },
+    });
     return { _id: user.id };
+  }
+
+  async handleActive(data: CodeAuthDto) {
+    const user = await this.userRepository.findOne({
+      where: { id: Number(data.id), code: data.code },
+    });
+    if (!user) {
+      throw new BadRequestException('Mã code không hợp lệ ');
+    }
+
+    const isBeforeCheck = dayjs().isBefore(user.codeExpired);
+    if (isBeforeCheck) {
+      await this.userRepository.update(
+        { id: Number(data.id) },
+        { isActive: true },
+      );
+      console.log(' update isActive', isBeforeCheck);
+
+      return { isBeforeCheck };
+    } else {
+      throw new BadGatewayException();
+    }
   }
 }

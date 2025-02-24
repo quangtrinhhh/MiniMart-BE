@@ -17,3 +17,11 @@ export class CreateAuthDto {
   @IsNotEmpty({ message: 'phone_number không được để trống ' })
   phone_number: string;
 }
+
+export class CodeAuthDto {
+  @IsNotEmpty({ message: 'id không được để trống ' })
+  id: string;
+
+  @IsNotEmpty({ message: 'code không được để trống ' })
+  code: string;
+}
