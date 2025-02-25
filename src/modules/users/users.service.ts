@@ -4,7 +4,6 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
 import { Repository } from 'typeorm';
@@ -13,6 +12,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { CodeAuthDto, CreateAuthDto } from 'src/auth/dto/create-auth.dto';
 import dayjs from 'dayjs';
 import { MailerService } from '@nestjs-modules/mailer';
+import { UpdateUserDto } from './dto/update-user.dto';
+import aqp from 'api-query-params';
+import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class UsersService {
@@ -58,19 +60,70 @@ export class UsersService {
     return repon;
   }
 
-  async findAll() {
-    return this.userRepository.find();
+  async findAll(query: string, current: number, pageSize: number) {
+    // Đảm bảo giá trị mặc định cho `current` và `pageSize`
+    current = current ?? 1;
+    pageSize = pageSize ?? 8;
+    // Parse query nhưng bỏ qua `skip` và `limit` của `aqp`
+    const { filter, sort } = aqp(query);
+    const totalItems = (await this.userRepository.find(filter)).length;
+    const totalPages = Math.ceil(totalItems / pageSize);
+    const skip = (current - 1) * pageSize;
+
+    delete filter.pageSize;
+    delete filter.current;
+
+    const result = await this.userRepository.find({
+      where: filter,
+      skip: skip,
+      take: pageSize,
+      order: sort || { created_at: 'DESC' },
+    });
+    return {
+      result: plainToInstance(User, result),
+      totalItems: totalItems,
+      totalPages: totalPages,
+    };
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} user`;
+  async findOne(id: number) {
+    const user = await this.userRepository.findOne({
+      where: { id: Number(id) },
+    });
+    return user;
   }
 
-  update(id: number, updateUserDto: UpdateUserDto) {
-    return updateUserDto;
+  async update(id: number, updateUserDto: UpdateUserDto) {
+    const {
+      first_name,
+      last_name,
+      role,
+      address,
+      city,
+      state,
+      country,
+      phone_number,
+    } = updateUserDto;
+
+    const result = await this.userRepository.update(id, {
+      first_name,
+      last_name,
+      role,
+      address,
+      city,
+      state,
+      country,
+      phone_number,
+      updated_at: dayjs(),
+    });
+    if (result.affected === 0)
+      throw new BadRequestException(` User with ID ${id} not found`);
+    return this.userRepository.findOne({ where: { id } });
   }
 
-  remove(id: number) {
+  async remove(id: number) {
+    await this.userRepository.delete(id);
+
     return `This action removes a #${id} user`;
   }
   async findByEmail(email: string) {
@@ -103,8 +156,8 @@ export class UsersService {
 
     void this.mailerService.sendMail({
       to: user.email,
-      subject: 'Acctivate your account at @minimart',
-      text: 'Hello World!',
+      subject: 'Account registration information at EGA Mini Mart',
+      text: 'EGA Mini Mart',
       template: 'register',
       context: {
         name:
@@ -137,5 +190,35 @@ export class UsersService {
     } else {
       throw new BadGatewayException();
     }
+  }
+
+  async retryActive(email: string) {
+    const user = await this.userRepository.findOne({ where: { email } });
+
+    if (!user) throw new BadRequestException('Tài khoản không tồn tại');
+
+    if (user.isActive)
+      throw new BadRequestException('Tài khoản đã được kích hoạt');
+    const codeID = this.generate6DigitCode();
+
+    await this.userRepository.update(
+      { id: user.id },
+      { code: codeID, codeExpired: dayjs().add(15, 'minute').toDate() },
+    );
+
+    void this.mailerService.sendMail({
+      to: user.email,
+      subject: 'Account registration information at EGA Mini Mart',
+      text: 'EGA Mini Mart',
+      template: 'register',
+      context: {
+        name:
+          user.first_name && user.last_name
+            ? `${user.first_name} ${user.last_name}`
+            : user.email,
+        activationCode: codeID,
+      },
+    });
+    return { data: `Code đã được gửi lại ${email}` };
   }
 }

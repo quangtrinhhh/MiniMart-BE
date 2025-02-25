@@ -1,3 +1,4 @@
+import { Exclude } from 'class-transformer';
 import { Cart } from 'src/modules/cart/entities/cart.entity';
 import { Order } from 'src/modules/orders/entities/order.entity';
 import {
@@ -23,6 +24,7 @@ export class User {
   @Column({ type: 'varchar', length: 255, unique: true })
   email: string;
 
+  @Exclude()
   @Column({ type: 'varchar', length: 255 })
   password: string;
 

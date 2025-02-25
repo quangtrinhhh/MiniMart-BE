@@ -31,11 +31,9 @@ export class AuthController {
     return this.authService.checkCode(codeAuthDto);
   }
 
-  // @Post('mail')
-  // @Public()
-  // async sendMail(@Body() body: { id: number; email: string; name: string }) {
-  //   const { id, email, name } = body;
-  //   await this.authService.sendMail(id, email, name);
-  //   return 'ok';
-  // }
+  @Post('retry-active')
+  @Public()
+  retryActive(@Body('email') email: string) {
+    return this.authService.retryActive(email);
+  }
 }
