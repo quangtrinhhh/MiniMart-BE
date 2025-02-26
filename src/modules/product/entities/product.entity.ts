@@ -1,6 +1,7 @@
 import { CartItem } from 'src/modules/cartitem/entities/cartitem.entity';
 import { Category } from 'src/modules/category/entities/category.entity';
 import { OrderItem } from 'src/modules/orderitem/entities/orderitem.entity';
+import { ProductAsset } from 'src/modules/productasset/entities/productasset.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -15,7 +16,7 @@ export class Product {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => Category, (category) => category.products)
+  @ManyToOne(() => Category, (category) => category.products, { eager: true })
   @JoinColumn({ name: 'category_id' })
   category: Category;
 
@@ -46,15 +47,20 @@ export class Product {
   @Column({ type: 'boolean', default: false })
   featured: boolean;
 
-  @Column({ type: 'date' })
-  created_at: string;
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  created_at: Date;
 
-  @Column({ type: 'date' })
-  updated_at: string;
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  updated_at: Date;
 
   @OneToMany(() => OrderItem, (orderItem) => orderItem.product)
   orderItems: OrderItem[];
 
   @OneToMany(() => CartItem, (cartItem) => cartItem.product)
   cartItems: CartItem[]; // Mối quan hệ OneToMany với CartItem
+
+  @OneToMany(() => ProductAsset, (productAsset) => productAsset.product, {
+    eager: true,
+  })
+  productAssets: ProductAsset[];
 }

@@ -1,8 +1,6 @@
 import {
-  IsBoolean,
-  IsDateString,
   IsDecimal,
-  IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
@@ -17,11 +15,6 @@ export class CreateProductDto {
   price: number;
 
   @IsString()
-  @MaxLength(45)
-  @IsOptional()
-  slug?: string;
-
-  @IsString()
   @IsOptional()
   description?: string;
 
@@ -29,24 +22,12 @@ export class CreateProductDto {
   @IsOptional()
   discount?: number;
 
-  @IsInt()
+  @IsNotEmpty()
   quantity: number;
 
-  @IsInt()
   @IsOptional()
   sold?: number;
 
-  @IsBoolean()
-  @IsOptional()
-  status?: boolean;
-
-  @IsBoolean()
-  @IsOptional()
-  featured?: boolean;
-
-  @IsDateString()
-  createdAt: string;
-
-  @IsDateString()
-  updatedAt: string;
+  @IsNotEmpty()
+  category_id: number;
 }

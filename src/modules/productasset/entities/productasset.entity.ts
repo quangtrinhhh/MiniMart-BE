@@ -20,7 +20,7 @@ export class ProductAsset {
   @JoinColumn({ name: 'Assets_id' })
   asset: Asset;
 
-  @ManyToOne(() => Product, (product) => product.id, { eager: true })
+  @ManyToOne(() => Product, (product) => product.id)
   @JoinColumn({ name: 'Product_id' })
   product: Product;
 }

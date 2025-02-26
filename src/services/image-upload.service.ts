@@ -2,51 +2,71 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 
-import { Injectable } from '@nestjs/common';
-import axios, { AxiosResponse, AxiosError } from 'axios';
-import FormData from 'form-data'; // Đảm bảo FormData đã được import đúng
-import { Express } from 'express'; // Đảm bảo bạn đã cài đặt Express
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import axios, { AxiosResponse } from 'axios';
+import FormData from 'form-data';
+import { Express } from 'express';
 
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 @Injectable()
 export class ImageUploadService {
-  async uploadImage(
-    file: Express.Multer.File,
-  ): Promise<{ link: string; id: string }> {
-    const formData = new FormData();
+  private readonly IMGUR_API_URL = 'https://api.imgur.com/3/upload';
+  private readonly IMGUR_CLIENT_ID = process.env.IMGUR_CLIENT_ID || '';
 
-    // Append file buffer vào formData
+  async uploadImage(file: Express.Multer.File): Promise<{
+    link: string;
+    id: string;
+    type: string;
+    width: number;
+    height: number;
+    size: number;
+  }> {
+    if (!this.IMGUR_CLIENT_ID) {
+      throw new InternalServerErrorException(
+        'Imgur Client-ID không được cấu hình.',
+      );
+    }
+
+    const formData = new FormData();
     formData.append('image', file.buffer, file.originalname);
 
     try {
       const response: AxiosResponse = await axios.post(
-        'https://api.imgur.com/3/upload',
+        this.IMGUR_API_URL,
         formData,
         {
           headers: {
             ...formData.getHeaders(),
-            Authorization: `Client-ID ${process.env.IMGUR_CLIENT_ID}`, // Thêm Client-ID nếu cần
+            Authorization: `Client-ID ${this.IMGUR_CLIENT_ID}`,
           },
         },
       );
 
-      // Trả về cả link và id của ảnh từ Imgur
-      const { link, id } = response.data.data;
-      console.log('Image uploaded to:', link);
-
-      return { link, id };
-    } catch (error: unknown) {
-      if (error instanceof AxiosError) {
-        throw new Error(
-          `Image upload failed: ${error.response?.data?.error || error.message}`,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      if (!response.data || !response.data.data) {
+        throw new InternalServerErrorException(
+          'Không nhận được phản hồi hợp lệ từ Imgur.',
         );
-      } else if (error instanceof Error) {
-        throw new Error(
-          `Có lỗi không xác định trong quá trình tải ảnh lên: ${error.message}`,
-        );
-      } else {
-        throw new Error('Có lỗi không xác định trong quá trình tải ảnh lên');
       }
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      const { link, id, type, width, height, size } = response.data.data;
+
+      console.log(`✅ Ảnh đã upload thành công: ${link}`);
+      return {
+        link,
+        id,
+        type,
+        width: Number(width),
+        height: Number(height),
+        size: Number(size),
+      };
+    } catch (error) {
+      console.error('❌ Lỗi upload ảnh:', error);
+
+      throw new InternalServerErrorException(
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        error.response?.data?.error || 'Không thể tải ảnh lên Imgur',
+      );
     }
   }
 }
