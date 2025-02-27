@@ -2,6 +2,7 @@ import { CartItem } from 'src/modules/cartitem/entities/cartitem.entity';
 import { Category } from 'src/modules/category/entities/category.entity';
 import { OrderItem } from 'src/modules/orderitem/entities/orderitem.entity';
 import { ProductAsset } from 'src/modules/productasset/entities/productasset.entity';
+import { ProductAttribute } from 'src/modules/productattribute/entities/productattribute.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -63,4 +64,11 @@ export class Product {
     eager: true,
   })
   productAssets: ProductAsset[];
+
+  @OneToMany(
+    () => ProductAttribute,
+    (productAttribute) => productAttribute.product,
+    { cascade: true },
+  )
+  attributes: ProductAttribute[];
 }

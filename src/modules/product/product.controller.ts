@@ -8,28 +8,59 @@ import {
   Delete,
   UploadedFile,
   UseInterceptors,
+  Query,
+  UploadedFiles,
 } from '@nestjs/common';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { ApiResponseDto } from 'src/global/globalClass';
 
 @Controller('product')
 export class ProductController {
   constructor(private readonly productService: ProductService) {}
 
-  @UseInterceptors(FileInterceptor('image'))
+  @UseInterceptors(FilesInterceptor('images', 5))
   @Post()
-  create(
+  async create(
     @Body() createProductDto: CreateProductDto,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFiles() file: Express.Multer.File[],
   ) {
-    return this.productService.create(createProductDto, file);
+    try {
+      const repon = await this.productService.create(createProductDto, file);
+      return new ApiResponseDto('Product created successfully', repon);
+    } catch (error) {
+      return new ApiResponseDto(
+        'Failed to create product',
+        null,
+        false,
+        error.message,
+      );
+    }
   }
 
   @Get()
-  findAll() {
-    return this.productService.findAll();
+  async findAll(
+    @Query() query: string,
+    @Query('current') current: string,
+    @Query('pageSize') pageSize: string,
+  ) {
+    try {
+      const repon = await this.productService.findAll(
+        query,
+        +current || 1,
+        +pageSize || 8,
+      );
+      return new ApiResponseDto('Product findAll successfully', repon);
+    } catch (error) {
+      return new ApiResponseDto(
+        'Failed to findAll product',
+        null,
+        false,
+        error,
+      );
+    }
   }
 
   @Get(':id')
