@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { ProductassetService } from './productasset.service';
 import { CreateProductassetDto } from './dto/create-productasset.dto';
 import { UpdateProductassetDto } from './dto/update-productasset.dto';
@@ -23,7 +31,10 @@ export class ProductassetController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateProductassetDto: UpdateProductassetDto) {
+  update(
+    @Param('id') id: string,
+    @Body() updateProductassetDto: UpdateProductassetDto,
+  ) {
     return this.productassetService.update(+id, updateProductassetDto);
   }
 

@@ -9,16 +9,23 @@ import {
   UseInterceptors,
   UploadedFile,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { RolesGuard } from 'src/auth/passport/roles.guard';
+import { Roles } from 'src/auth/decorator/roles.decorator';
+import { RoleEnum } from 'src/common/enums/role.enum';
+import { JwtAuthGuard } from 'src/auth/passport/jwt-auth.guard';
 
 @Controller('category')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
 
+  @Roles(RoleEnum.ADMIN, RoleEnum.MANAGER) // Chỉ admin mới có thể truy cập
   @Post()
   @UseInterceptors(FileInterceptor('image'))
   async create(
@@ -28,6 +35,7 @@ export class CategoryController {
     return this.categoryService.create(createCategoryDto, file);
   }
 
+  @Roles(RoleEnum.ADMIN)
   @Get()
   findAll(
     @Query() query: string,

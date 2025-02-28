@@ -1,32 +1,34 @@
+// src/auth/passport/jwt-auth.guard.ts
+
 import {
   ExecutionContext,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { IS_PUBLIC_KEY } from '../decorator/customize';
 import { Reflector } from '@nestjs/core';
+import { IS_PUBLIC_KEY } from '../decorator/customize';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
   constructor(private reflector: Reflector) {
-    super();
+    super(); // Bạn không cần truyền gì vào đây, chỉ cần gọi super()
   }
+
   canActivate(context: ExecutionContext) {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
     if (isPublic) {
-      return true;
+      return true; // Bỏ qua xác thực JWT cho các route công khai
     }
-    // Add your custom authentication logic here
-    // for example, call super.logIn(request) to establish a session.
-    return super.canActivate(context);
+    return super.canActivate(context); // Tiến hành xác thực JWT
   }
 
   handleRequest(err, user, info) {
-    // You can throw an exception based on either "info" or "err" arguments
+    console.log(info);
+
     if (err || !user) {
       throw (
         err ||
@@ -35,6 +37,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         )
       );
     }
-    return user;
+    console.log('user đã xác thực từ jwt-auth', user);
+
+    return user; // Trả về người dùng sau khi xác thực
   }
 }

@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { CodeAuthDto, CreateAuthDto } from 'src/auth/dto/create-auth.dto';
 import dayjs from 'dayjs';
 import { MailerService } from '@nestjs-modules/mailer';
-import { UpdateUserDto } from './dto/update-user.dto';
+// import { UpdateUserDto } from './dto/update-user.dto';
 import aqp from 'api-query-params';
 import { plainToInstance } from 'class-transformer';
 
@@ -93,33 +93,33 @@ export class UsersService {
     return user;
   }
 
-  async update(id: number, updateUserDto: UpdateUserDto) {
-    const {
-      first_name,
-      last_name,
-      role,
-      address,
-      city,
-      state,
-      country,
-      phone_number,
-    } = updateUserDto;
+  // async update(id: number, updateUserDto: UpdateUserDto) {
+  //   const {
+  //     first_name,
+  //     last_name,
+  //     role,
+  //     address,
+  //     city,
+  //     state,
+  //     country,
+  //     phone_number,
+  //   } = updateUserDto;
 
-    const result = await this.userRepository.update(id, {
-      first_name,
-      last_name,
-      role,
-      address,
-      city,
-      state,
-      country,
-      phone_number,
-      updated_at: dayjs(),
-    });
-    if (result.affected === 0)
-      throw new BadRequestException(` User with ID ${id} not found`);
-    return this.userRepository.findOne({ where: { id } });
-  }
+  //   const result = await this.userRepository.update(id, {
+  //     first_name,
+  //     last_name,
+  //     role,
+  //     address,
+  //     city,
+  //     state,
+  //     country,
+  //     phone_number,
+  //     updated_at: dayjs(),
+  //   });
+  //   if (result.affected === 0)
+  //     throw new BadRequestException(` User with ID ${id} not found`);
+  //   return this.userRepository.findOne({ where: { id } });
+  // }
 
   async remove(id: number) {
     await this.userRepository.delete(id);
