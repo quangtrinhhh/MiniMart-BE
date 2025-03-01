@@ -16,7 +16,7 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { RolesGuard } from 'src/auth/passport/roles.guard';
-import { Roles } from 'src/auth/decorator/roles.decorator';
+import { Roles } from 'src/decorator/roles.decorator';
 import { RoleEnum } from 'src/common/enums/role.enum';
 import { JwtAuthGuard } from 'src/auth/passport/jwt-auth.guard';
 
@@ -35,7 +35,7 @@ export class CategoryController {
     return this.categoryService.create(createCategoryDto, file);
   }
 
-  @Roles(RoleEnum.ADMIN)
+  @Roles(RoleEnum.ADMIN, RoleEnum.MANAGER)
   @Get()
   findAll(
     @Query() query: string,
@@ -45,11 +45,13 @@ export class CategoryController {
     return this.categoryService.findAll(query, +current, +pageSize);
   }
 
+  @Roles(RoleEnum.ADMIN, RoleEnum.MANAGER)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.categoryService.findOne(+id);
   }
 
+  @Roles(RoleEnum.ADMIN, RoleEnum.MANAGER)
   @Patch(':id')
   @UseInterceptors(FileInterceptor('image'))
   update(
@@ -60,6 +62,7 @@ export class CategoryController {
     return this.categoryService.update(+id, updateCategoryDto, file);
   }
 
+  @Roles(RoleEnum.ADMIN, RoleEnum.MANAGER)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.categoryService.remove(+id);

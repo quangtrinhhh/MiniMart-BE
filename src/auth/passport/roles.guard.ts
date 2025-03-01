@@ -9,7 +9,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RoleEnum } from 'src/common/enums/role.enum';
-import { ROLES_KEY } from '../decorator/roles.decorator';
+import { ROLES_KEY } from '../../decorator/roles.decorator';
 
 @Injectable()
 export class RolesGuard implements CanActivate {

@@ -15,6 +15,7 @@ import { MailerService } from '@nestjs-modules/mailer';
 // import { UpdateUserDto } from './dto/update-user.dto';
 import aqp from 'api-query-params';
 import { plainToInstance } from 'class-transformer';
+import { RoleEnum } from 'src/common/enums/role.enum';
 
 @Injectable()
 export class UsersService {
@@ -23,6 +24,9 @@ export class UsersService {
     private readonly userRepository: Repository<User>,
     private mailerService: MailerService,
   ) {}
+  async onModuleInit() {
+    await this.createAdminAccount();
+  }
   generate6DigitCode() {
     const uuid = uuidv4(); // Tạo UUID
     const shortCode =
@@ -220,5 +224,32 @@ export class UsersService {
       },
     });
     return { data: `Code đã được gửi lại ${email}` };
+  }
+
+  private async createAdminAccount() {
+    const adminEmail = 'admin@gmail.com';
+    const existingAdmin = await this.userRepository.findOne({
+      where: { email: adminEmail },
+    });
+
+    if (!existingAdmin) {
+      const hashedPassword = await hashPasswordHelper('123456');
+      const adminUser = this.userRepository.create({
+        first_name: 'Admin',
+        last_name: 'User',
+        email: adminEmail,
+        password: `${hashedPassword}`,
+        role: RoleEnum.ADMIN,
+        isActive: true,
+        code: '000000',
+        codeExpired: new Date(),
+        phone_number: undefined,
+      });
+
+      await this.userRepository.save(adminUser);
+      console.log('Admin account created successfully!');
+    } else {
+      console.log('Admin account already exists.');
+    }
   }
 }
