@@ -7,14 +7,14 @@ import {
   Param,
   Delete,
   UseInterceptors,
-  UploadedFile,
   Query,
   UseGuards,
+  UploadedFiles,
 } from '@nestjs/common';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { RolesGuard } from 'src/auth/passport/roles.guard';
 import { Roles } from 'src/decorator/roles.decorator';
 import { RoleEnum } from 'src/common/enums/role.enum';
@@ -27,10 +27,10 @@ export class CategoryController {
 
   @Roles(RoleEnum.ADMIN, RoleEnum.MANAGER) // Chỉ admin mới có thể truy cập
   @Post()
-  @UseInterceptors(FileInterceptor('image'))
+  @UseInterceptors(FilesInterceptor('images', 1))
   async create(
     @Body() createCategoryDto: CreateCategoryDto,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFiles() file: Express.Multer.File[],
   ) {
     return this.categoryService.create(createCategoryDto, file);
   }
@@ -53,11 +53,11 @@ export class CategoryController {
 
   @Roles(RoleEnum.ADMIN, RoleEnum.MANAGER)
   @Patch(':id')
-  @UseInterceptors(FileInterceptor('image'))
+  @UseInterceptors(FilesInterceptor('images', 1))
   update(
     @Param('id') id: string,
     @Body() updateCategoryDto: UpdateCategoryDto,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFiles() file: Express.Multer.File[],
   ) {
     return this.categoryService.update(+id, updateCategoryDto, file);
   }

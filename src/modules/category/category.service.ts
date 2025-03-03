@@ -10,24 +10,25 @@ import { Category } from './entities/category.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import slugify from 'slugify';
-import { ImageUploadService } from 'src/services/image-upload.service';
 import aqp from 'api-query-params';
+import { ImageUploadConfig } from 'src/config/image-upload.config';
 
 @Injectable()
 export class CategoryService {
   constructor(
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>,
-    private readonly imageUploadService: ImageUploadService,
+    private readonly imageUploadConfig: ImageUploadConfig,
   ) {}
 
   async create(
     createCategoryDto: CreateCategoryDto,
-    file: Express.Multer.File,
+    files: Express.Multer.File[],
   ) {
-    if (file) {
+    if (files) {
       // Nếu có file ảnh, upload ảnh lên và lấy URL
-      const { link } = await this.imageUploadService.uploadImage(file);
+
+      const { link } = await this.imageUploadConfig.uploadImage(files[0]);
       createCategoryDto.image = link; // Gán URL ảnh vào DTO
     }
 
@@ -37,8 +38,8 @@ export class CategoryService {
       ...createCategoryDto,
       slug,
     });
-
-    return await this.categoryRepository.save(category);
+    const result = await this.categoryRepository.save(category);
+    return { result };
   }
 
   async findAll(query: string, current: number, pageSize: number) {
@@ -58,7 +59,7 @@ export class CategoryService {
       order: sort || { created_at: 'DESC' },
     });
     return {
-      result: result,
+      result,
       totalItems: totalItems,
       totalPages: totalPages,
     };
@@ -76,11 +77,11 @@ export class CategoryService {
   async update(
     id: number,
     updateCategoryDto: UpdateCategoryDto,
-    file: Express.Multer.File,
+    files: Express.Multer.File[],
   ) {
-    if (file) {
+    if (files) {
       // Nếu có file ảnh, upload ảnh lên và lấy URL
-      const { link } = await this.imageUploadService.uploadImage(file);
+      const { link } = await this.imageUploadConfig.uploadImage(files[0]);
       console.log('image:', link);
 
       updateCategoryDto.image = link; // Gán URL ảnh vào DTO
