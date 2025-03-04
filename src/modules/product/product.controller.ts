@@ -31,12 +31,8 @@ export class ProductController {
       const repon = await this.productService.create(createProductDto, file);
       return new ApiResponseDto('Product created successfully', repon);
     } catch (error) {
-      return new ApiResponseDto(
-        'Failed to create product',
-        null,
-        false,
-        error.message,
-      );
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+      return new ApiResponseDto('Failed to create product', null, false, error);
     }
   }
 
@@ -46,21 +42,11 @@ export class ProductController {
     @Query('current') current: string,
     @Query('pageSize') pageSize: string,
   ) {
-    try {
-      const repon = await this.productService.findAll(
-        query,
-        +current || 1,
-        +pageSize || 8,
-      );
-      return new ApiResponseDto('Product findAll successfully', repon);
-    } catch (error) {
-      return new ApiResponseDto(
-        'Failed to findAll product',
-        null,
-        false,
-        error,
-      );
-    }
+    return await this.productService.findAll(
+      query,
+      +current || 1,
+      +pageSize || 8,
+    );
   }
 
   @Get(':id')

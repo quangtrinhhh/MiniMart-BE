@@ -8,7 +8,7 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { Category } from './entities/category.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, ILike, Repository } from 'typeorm';
 import slugify from 'slugify';
 import aqp from 'api-query-params';
 import { ImageUploadConfig } from 'src/config/image-upload.config';
@@ -43,25 +43,37 @@ export class CategoryService {
   }
 
   async findAll(query: string, current: number, pageSize: number) {
-    // Parse query nhưng bỏ qua `skip` và `limit` của `aqp`
     const { filter, sort } = aqp(query);
-    const totalItems = (await this.categoryRepository.find(filter)).length;
-    const totalPages = Math.ceil(totalItems / pageSize);
-    const skip = (current - 1) * pageSize;
+    console.log('Parsed filter:', filter);
 
-    delete filter.pageSize;
-    delete filter.current;
+    const skip = (current - 1) * pageSize;
+    const where: FindOptionsWhere<Category>[] = [];
+
+    if (filter?.search) {
+      const searchValue = String(filter.search).trim(); // 🔄 Chuyển thành string nếu là số
+
+      // 🔍 Tìm theo nhiều trường cùng lúc
+      where.push(
+        { id: Number(searchValue) || undefined }, // 🔍 Nếu search là số, tìm theo id
+        { name: ILike(`%${searchValue}%`) }, // 🔍 Tìm theo name
+        { status: searchValue === 'true' }, // 🔍 Tìm theo status (nếu nhập true/false)
+      );
+    }
+
+    const totalItems = await this.categoryRepository.count({ where });
+    const totalPages = Math.ceil(totalItems / pageSize);
 
     const result = await this.categoryRepository.find({
-      where: filter,
-      skip: skip,
+      where,
+      skip,
       take: pageSize,
       order: sort || { created_at: 'DESC' },
     });
+
     return {
       result,
-      totalItems: totalItems,
-      totalPages: totalPages,
+      totalItems,
+      totalPages,
     };
   }
 
