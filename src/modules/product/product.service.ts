@@ -54,7 +54,12 @@ export class ProductService {
       if (!category) {
         throw new BadRequestException('Không tìm thấy danh mục sản phẩm.');
       }
-
+      const existingProduct = await this.productRepository.findOneBy({
+        name: createProductDto.name,
+      });
+      if (existingProduct) {
+        throw new BadRequestException('Tên sản phẩm đã tồn tại.');
+      }
       // ✅ Tạo slug sản phẩm
       const slug = slugify(createProductDto.name, { lower: true });
 
@@ -156,18 +161,16 @@ export class ProductService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(slug: string) {
     const product = await this.productRepository.findOne({
-      where: { id: Number(id) },
+      where: { slug: slug },
       relations: ['category', 'attributes', 'variants', 'variants.values'],
     });
 
     if (!product) throw new BadGatewayException('Không tìm thấy product');
 
-    const { assets, ...productData } = product; // Loại bỏ 'productAssets'
     return {
-      ...productData,
-      assets: assets.map((pa) => pa.asset), // Chỉ giữ 'asset'
+      result: product,
     };
   }
 

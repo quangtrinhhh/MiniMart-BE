@@ -15,6 +15,7 @@ import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { Public } from 'src/decorator/customize';
 
 @Controller('product')
 export class ProductController {
@@ -30,6 +31,7 @@ export class ProductController {
   }
 
   @Get()
+  @Public()
   async findAll(
     @Query() query: string,
     @Query('current') current: string,
@@ -43,8 +45,9 @@ export class ProductController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.productService.findOne(+id);
+  @Public()
+  findOne(@Param('slug') slug: string) {
+    return this.productService.findOne(slug);
   }
 
   @UseInterceptors(FileInterceptor('image'))
