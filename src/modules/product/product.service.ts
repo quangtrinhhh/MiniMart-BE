@@ -15,6 +15,9 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import aqp from 'api-query-params';
 import { ImageUploadConfig } from 'src/config/image-upload.config';
 import { AssetsService } from '../assets/assets.service';
+import { ProductAttribute } from '../product-attribute/entities/product-attribute.entity';
+import { ProductVariant } from '../product-variant/entities/product-variant.entity';
+import { ProductVariantValue } from '../product-variant-value/entities/product-variant-value.entity';
 
 @Injectable()
 export class ProductService {
@@ -25,6 +28,12 @@ export class ProductService {
     private categoryRepository: Repository<Category>,
     @InjectRepository(ProductAsset)
     private productAssetRepository: Repository<ProductAsset>,
+    @InjectRepository(ProductAttribute)
+    private productAttributeRepository: Repository<ProductAttribute>,
+    @InjectRepository(ProductVariant)
+    private productVariantRepository: Repository<ProductVariant>,
+    @InjectRepository(ProductVariantValue)
+    private productVariantValueRepository: Repository<ProductVariantValue>,
     private readonly imageUploadConfig: ImageUploadConfig,
     private readonly assetsService: AssetsService,
     private dataSource: DataSource,
@@ -35,58 +44,95 @@ export class ProductService {
     files: Express.Multer.File[],
   ) {
     const queryRunner = this.dataSource.createQueryRunner();
-    // Bắt đầu transaction
     await queryRunner.startTransaction();
 
     try {
-      // ✅ Tìm category
-      const category = await this.categoryRepository.findOne({
-        where: { id: Number(createProductDto.category_id) },
+      // ✅ Kiểm tra danh mục sản phẩm
+      const category = await this.categoryRepository.findOneBy({
+        id: createProductDto.category_id,
       });
-      if (!category) throw new BadRequestException('Không tìm thấy category');
+      if (!category) {
+        throw new BadRequestException('Không tìm thấy danh mục sản phẩm.');
+      }
+
+      // ✅ Tạo slug sản phẩm
+      const slug = slugify(createProductDto.name, { lower: true });
 
       // ✅ Tạo sản phẩm
-      const slug = slugify(createProductDto.name, { lower: true });
-      const product = this.productRepository.create({
+      const product = queryRunner.manager.create(Product, {
         ...createProductDto,
         category,
         slug,
-        quantity: Number(createProductDto.quantity),
       });
-      // Lưu sản phẩm vào database
-      await queryRunner.manager.save(Product, product);
+      await queryRunner.manager.save(product);
+      console.log('✅ Tạo sản phẩm thành công:', product.id);
 
-      // await this.productRepository.save(product);
+      // ✅ Xử lý biến thể sản phẩm (ProductVariant)
+      if (createProductDto.variants && createProductDto.variants.length > 0) {
+        const variants: ProductVariant[] = [];
+        for (const variantDto of createProductDto.variants) {
+          const variant = queryRunner.manager.create(ProductVariant, {
+            ...variantDto,
+            product,
+          });
 
-      const assets = await this.assetsService.uploadImages(files);
+          // ✅ Tạo SKU tự động cho từng biến thể
+          variant.SKU = this.generateSKU(
+            category.id,
+            product.id,
+            variant.id,
+            variant.name,
+          );
+
+          await queryRunner.manager.save(variant);
+          variants.push(variant);
+        }
+        console.log('✅ Tạo biến thể sản phẩm thành công.');
+      }
+
+      // ✅ Upload ảnh và kiểm tra lỗi
+      let assets: Asset[] = [];
+      try {
+        assets = await this.assetsService.uploadImages(files);
+        if (!assets.length) {
+          throw new BadRequestException('❌ Không có ảnh nào được tải lên.');
+        }
+      } catch (error) {
+        throw new BadRequestException(`❌ Upload ảnh thất bại: ${error}`);
+      }
 
       // ✅ Tạo liên kết giữa sản phẩm và ảnh
       const productAssets = assets.map((asset) =>
         this.productAssetRepository.create({
-          product: product,
-          asset: asset,
-          type: 'gallery', // Hoặc 'thumbnail' nếu cần
+          product,
+          asset,
+          type: 'gallery',
         }),
       );
-      // await this.productAssetRepository.save(productAssets);
       await queryRunner.manager.save(ProductAsset, productAssets);
+      console.log('🚀 Tạo productAssets thành công.');
 
+      // ✅ Commit giao dịch
       await queryRunner.commitTransaction();
+      console.log('✅ Tạo sản phẩm và các thành phần liên quan thành công');
 
-      return {
-        product,
-        images: assets,
-      };
+      return { product };
     } catch (error) {
-      // Nếu có lỗi, rollback transaction
       await queryRunner.rollbackTransaction();
-      throw error;
+      console.error('❌ Lỗi khi tạo sản phẩm:', error);
+      throw new BadRequestException(`Lỗi khi tạo sản phẩm: ${error}`);
     } finally {
-      // Đóng QueryRunner
       await queryRunner.release();
     }
   }
 
+  /**
+   *
+   * @param query
+   * @param current
+   * @param pageSize
+   * @returns
+   */
   async findAll(query: string, current = 1, pageSize = 10) {
     const { filter, sort } = aqp(query);
 
@@ -100,19 +146,11 @@ export class ProductService {
       skip: (current - 1) * pageSize,
       take: pageSize,
       order: orderBy,
-      relations: ['productAssets.asset'], // Load trực tiếp asset
-    });
-
-    const formattedProducts = products.map((product) => {
-      const { productAssets, ...productData } = product; // Loại bỏ 'productAssets'
-      return {
-        ...productData,
-        assets: productAssets.map((pa) => pa.asset),
-      };
+      relations: ['category', 'attributes', 'variants', 'variants.values'],
     });
 
     return {
-      result: formattedProducts,
+      result: products,
       totalItems,
       totalPages: Math.ceil(totalItems / pageSize),
     };
@@ -121,101 +159,180 @@ export class ProductService {
   async findOne(id: number) {
     const product = await this.productRepository.findOne({
       where: { id: Number(id) },
-      relations: ['productAssets.asset'], // Load trực tiếp 'asset' từ 'productAssets'
+      relations: ['category', 'attributes', 'variants', 'variants.values'],
     });
 
     if (!product) throw new BadGatewayException('Không tìm thấy product');
 
-    const { productAssets, ...productData } = product; // Loại bỏ 'productAssets'
+    const { assets, ...productData } = product; // Loại bỏ 'productAssets'
     return {
       ...productData,
-      assets: productAssets.map((pa) => pa.asset), // Chỉ giữ 'asset'
+      assets: assets.map((pa) => pa.asset), // Chỉ giữ 'asset'
     };
   }
 
   async update(
     id: number,
     updateProductDto: UpdateProductDto,
-    file: Express.Multer.File,
+    file?: Express.Multer.File,
   ) {
-    const product = await this.productRepository.findOne({ where: { id } });
-    if (!product)
-      throw new BadRequestException('Không tìm thấy product để update');
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.startTransaction();
 
-    if (updateProductDto.name) {
-      const slug = slugify(updateProductDto.name, { lower: true });
-      await this.productRepository.update(id, {
-        ...updateProductDto,
-        slug,
+    try {
+      // ✅ Tìm sản phẩm cùng với quan hệ liên quan
+      const product = await queryRunner.manager.findOne(Product, {
+        where: { id },
+        relations: ['variants', 'variants.values', 'assets', 'assets.asset'],
       });
-    }
 
-    // Thực hiện cập nhật
-    const result = await this.productRepository.update(id, updateProductDto);
-    if (result.affected === 0) {
-      throw new BadRequestException('Cập nhật thất bại');
-    }
-    const assetId = product?.productAssets[0]?.asset.id;
-    if (file) {
-      const { link, type, size } =
-        await this.imageUploadConfig.uploadImage(file);
-      await this.assetRepository.update(Number(assetId), {
-        filename: file.originalname,
-        path: link,
-        type,
-        size,
+      if (!product) {
+        throw new BadRequestException('Không tìm thấy sản phẩm để update');
+      }
+
+      // ✅ Cập nhật thông tin sản phẩm (nếu có tên mới thì cập nhật slug)
+      if (updateProductDto.name) {
+        updateProductDto.slug = slugify(updateProductDto.name, { lower: true });
+      }
+      await queryRunner.manager.update(Product, id, updateProductDto);
+
+      // ✅ Xử lý cập nhật biến thể sản phẩm (nếu có)
+      if (updateProductDto.variants) {
+        for (const variantDto of updateProductDto.variants) {
+          const variant = await queryRunner.manager.findOne(ProductVariant, {
+            where: { id: variantDto.id },
+          });
+
+          if (variant) {
+            await queryRunner.manager.update(
+              ProductVariant,
+              variant.id,
+              variantDto,
+            );
+          }
+        }
+      }
+
+      // ✅ Xử lý cập nhật ảnh (nếu có)
+      if (file) {
+        const asset = product.assets[0]?.asset; // Lấy asset hiện tại
+
+        // ✅ Nếu có ảnh cũ thì xóa trước khi cập nhật
+        if (asset) {
+          await queryRunner.manager.delete(Asset, asset.id);
+        }
+
+        // ✅ Upload ảnh mới
+        const { link, type, size } =
+          await this.imageUploadConfig.uploadImage(file);
+        const newAsset = queryRunner.manager.create(Asset, {
+          filename: file.originalname,
+          path: link,
+          type,
+          size,
+        });
+        await queryRunner.manager.save(newAsset);
+
+        // ✅ Cập nhật ProductAsset
+        const newProductAsset = queryRunner.manager.create(ProductAsset, {
+          product,
+          asset: newAsset,
+          type: 'gallery',
+        });
+        await queryRunner.manager.save(newProductAsset);
+      }
+
+      // ✅ Commit transaction nếu thành công
+      await queryRunner.commitTransaction();
+
+      return await queryRunner.manager.findOne(Product, {
+        where: { id },
+        relations: ['category', 'attributes', 'variants', 'variants.values'],
       });
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('❌ Lỗi khi cập nhật sản phẩm:', error);
+      throw new BadRequestException(`Lỗi khi cập nhật sản phẩm: ${error}`);
+    } finally {
+      await queryRunner.release();
     }
-
-    return await this.productRepository.findOne({ where: { id } });
   }
 
   async remove(id: number) {
     const queryRunner = this.dataSource.createQueryRunner();
-    // Bắt đầu transaction
     await queryRunner.startTransaction();
 
     try {
-      // Sử dụng queryRunner.query() thay cho repository.findOne()
+      // ✅ Load sản phẩm cùng với tất cả các quan hệ liên quan
       const product = await queryRunner.manager.findOne(Product, {
         where: { id },
-        relations: ['productAssets', 'productAssets.asset'], // Load luôn assets để tránh lỗi
+        relations: ['variants', 'variants.values', 'assets', 'assets.asset'],
       });
 
       if (!product) {
         throw new BadRequestException('Không tìm thấy sản phẩm để xóa');
       }
 
-      // Xóa tất cả các bản ghi trong bảng product_asset liên quan đến sản phẩm này
-      if (product.productAssets.length > 0) {
-        await queryRunner.manager.delete(
-          ProductAsset,
-          product.productAssets.map((pa) => pa.id),
-        );
+      // ✅ Xóa tất cả ProductVariantValue liên quan trước
+      const variantValuesIds = product.variants.flatMap(
+        (variant) => variant.values?.map((value) => value.id) || [],
+      );
+      if (variantValuesIds.length > 0) {
+        await queryRunner.manager.delete(ProductVariantValue, variantValuesIds);
       }
 
-      // Lấy danh sách assetId của tất cả ảnh sản phẩm
-      const assetIds = product.productAssets.map((pa) => pa.asset.id);
-
-      // Xóa toàn bộ ảnh trong bảng assets
-      if (assetIds.length > 0) {
-        await queryRunner.manager.delete(Asset, assetIds);
+      // ✅ Xóa tất cả ProductVariant liên quan
+      const variantIds = product.variants.map((variant) => variant.id);
+      if (variantIds.length > 0) {
+        await queryRunner.manager.delete(ProductVariant, variantIds);
       }
 
-      // Xóa sản phẩm
+      // ✅ Xóa tất cả ProductAsset liên quan
+      const productAssetIds = product.assets.map((pa) => pa.id);
+      if (productAssetIds.length > 0) {
+        await queryRunner.manager.delete(ProductAsset, productAssetIds);
+
+        // ✅ Xóa tất cả Asset liên quan
+        const assetIds = product.assets.map((pa) => pa.asset.id);
+        if (assetIds.length > 0) {
+          await queryRunner.manager.delete(Asset, assetIds);
+        }
+      }
+
+      // ✅ Xóa sản phẩm chính
       await queryRunner.manager.delete(Product, id);
 
-      // Commit transaction nếu mọi thứ đều thành công
+      // ✅ Commit transaction
       await queryRunner.commitTransaction();
 
       return { message: `Xóa thành công sản phẩm: ${product.name}` };
     } catch (error) {
-      // Rollback transaction nếu có lỗi xảy ra
       await queryRunner.rollbackTransaction();
-      throw error; // Throw lại lỗi để xử lý ở cấp độ cao hơn (VD: controller)
+      console.error('❌ Lỗi khi xóa sản phẩm:', error);
+      throw new BadRequestException(`Lỗi khi xóa sản phẩm: ${error}`);
     } finally {
-      // Đóng queryRunner sau khi xong
       await queryRunner.release();
     }
+  }
+
+  private generateSKU(
+    categoryId: number,
+    productId: number,
+    variantId?: number,
+    variantName?: string, // Thêm tên biến thể
+  ): string {
+    const categoryCode = String(categoryId).padStart(2, '0'); // Mã danh mục 2 chữ số
+    const productCode = String(productId).padStart(4, '0'); // Mã sản phẩm 4 chữ số
+    const variantCode = variantId ? String(variantId).padStart(2, '0') : '00'; // Mã biến thể 2 chữ số
+
+    // Xử lý variantName: chuẩn hóa, bỏ dấu, viết hoa
+    const variantSlug = variantName
+      ? slugify(variantName, { lower: false, strict: true }) // Loại bỏ ký tự đặc biệt
+          .replace(/-/g, '') // Bỏ dấu gạch ngang do slugify tạo ra
+          .slice(0, 10) // Giới hạn 10 ký tự
+          .toUpperCase() // Chuyển thành chữ in hoa
+      : 'DEFAULT';
+
+    return `${variantSlug}-${categoryCode}-${productCode}-${variantCode}}`;
   }
 }

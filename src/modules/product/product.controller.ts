@@ -15,7 +15,6 @@ import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { ApiResponseDto } from 'src/global/globalClass';
 
 @Controller('product')
 export class ProductController {
@@ -27,13 +26,7 @@ export class ProductController {
     @Body() createProductDto: CreateProductDto,
     @UploadedFiles() file: Express.Multer.File[],
   ) {
-    try {
-      const repon = await this.productService.create(createProductDto, file);
-      return new ApiResponseDto('Product created successfully', repon);
-    } catch (error) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-      return new ApiResponseDto('Failed to create product', null, false, error);
-    }
+    return await this.productService.create(createProductDto, file);
   }
 
   @Get()

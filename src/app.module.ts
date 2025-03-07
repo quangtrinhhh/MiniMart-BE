@@ -22,19 +22,21 @@ import { CartItem } from './modules/cartitem/entities/cartitem.entity';
 import { AssetsModule } from './modules/assets/assets.module';
 import { Asset } from './modules/assets/entities/asset.entity';
 import { ProductassetModule } from './modules/productasset/productasset.module';
-import { ProductattributeModule } from './modules/productattribute/productattribute.module';
-import { AttributesModule } from './modules/attributes/attributes.module';
 import { ReviewModule } from './modules/review/review.module';
 import { Review } from './modules/review/entities/review.entity';
 import { ProductAsset } from './modules/productasset/entities/productasset.entity';
-import { ProductAttribute } from './modules/productattribute/entities/productattribute.entity';
-import { Attribute } from './modules/attributes/entities/attribute.entity';
 import { AuthModule } from './auth/auth.module';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/passport/jwt-auth.guard';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
 import { TransformInterceptor } from './core/transform.interceptor';
+import { ProductAttributeModule } from './modules/product-attribute/product-attribute.module';
+import { ProductAttribute } from './modules/product-attribute/entities/product-attribute.entity';
+import { ProductVariantModule } from './modules/product-variant/product-variant.module';
+import { ProductVariantValueModule } from './modules/product-variant-value/product-variant-value.module';
+import { ProductVariant } from './modules/product-variant/entities/product-variant.entity';
+import { ProductVariantValue } from './modules/product-variant-value/entities/product-variant-value.entity';
 
 @Module({
   imports: [
@@ -52,7 +54,8 @@ import { TransformInterceptor } from './core/transform.interceptor';
       Review,
       ProductAsset,
       ProductAttribute,
-      Attribute,
+      ProductVariant,
+      ProductVariantValue,
     ]),
     MailerModule.forRootAsync({
       useFactory: () => ({
@@ -89,10 +92,11 @@ import { TransformInterceptor } from './core/transform.interceptor';
     CartitemModule,
     AssetsModule,
     ProductassetModule,
-    ProductattributeModule,
-    AttributesModule,
     ReviewModule,
     AuthModule,
+    ProductAttributeModule,
+    ProductVariantModule,
+    ProductVariantValueModule,
   ],
   controllers: [AppController],
   providers: [
