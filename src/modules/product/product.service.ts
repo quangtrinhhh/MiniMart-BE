@@ -162,6 +162,8 @@ export class ProductService {
   }
 
   async findOne(slug: string) {
+    console.log('Slug cần tìm:', slug); // Kiểm tra slug có đúng không
+
     const product = await this.productRepository.findOne({
       where: { slug: slug },
       relations: ['category', 'attributes', 'variants', 'variants.values'],
