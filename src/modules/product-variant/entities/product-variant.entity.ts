@@ -3,12 +3,10 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
-  OneToMany,
   CreateDateColumn,
   Index,
 } from 'typeorm';
 import { Product } from 'src/modules/product/entities/product.entity';
-import { ProductVariantValue } from 'src/modules/product-variant-value/entities/product-variant-value.entity';
 
 @Entity('product_variants')
 export class ProductVariant {
@@ -33,16 +31,6 @@ export class ProductVariant {
 
   @Column({ type: 'int', default: 0 })
   stock: number; // Số lượng tồn kho
-
-  @OneToMany(
-    () => ProductVariantValue,
-    (variantValue) => variantValue.variant,
-    {
-      cascade: true,
-      eager: false, // Lazy Load
-    },
-  )
-  values: ProductVariantValue[];
 
   @CreateDateColumn()
   created_at: Date;

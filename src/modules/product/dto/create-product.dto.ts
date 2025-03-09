@@ -6,6 +6,7 @@ import {
   MaxLength,
   IsArray,
   ValidateNested,
+  ArrayMinSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -16,15 +17,6 @@ class AttributeDto {
 
   @IsString()
   value: string;
-}
-
-// 📌 DTO cho giá trị biến thể (lưu thuộc tính của biến thể)
-class VariantValueDto {
-  @IsString()
-  attribute_name: string; // Ex: "Color"
-
-  @IsString()
-  value: string; // Ex: "Black"
 }
 
 // 📌 DTO cho biến thể sản phẩm (bao gồm giá, stock, SKU)
@@ -41,18 +33,9 @@ class VariantDto {
   @Type(() => Number)
   old_price?: number;
 
-  // @IsNotEmpty()
-  // @IsString()
-  // SKU: string;
-
   @IsNumber()
   @Type(() => Number)
   stock: number;
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => VariantValueDto)
-  values: VariantValueDto[];
 }
 
 // 📌 DTO chính cho tạo sản phẩm
@@ -84,10 +67,11 @@ export class CreateProductDto {
   @Type(() => Number)
   sold?: number;
 
-  @IsNotEmpty()
-  @IsNumber()
+  @IsArray()
+  @ArrayMinSize(1)
   @Type(() => Number)
-  category_id: number;
+  @IsNumber({}, { each: true })
+  category_ids: number[];
 
   @IsOptional()
   @IsArray()

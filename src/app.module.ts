@@ -34,9 +34,8 @@ import { TransformInterceptor } from './core/transform.interceptor';
 import { ProductAttributeModule } from './modules/product-attribute/product-attribute.module';
 import { ProductAttribute } from './modules/product-attribute/entities/product-attribute.entity';
 import { ProductVariantModule } from './modules/product-variant/product-variant.module';
-import { ProductVariantValueModule } from './modules/product-variant-value/product-variant-value.module';
 import { ProductVariant } from './modules/product-variant/entities/product-variant.entity';
-import { ProductVariantValue } from './modules/product-variant-value/entities/product-variant-value.entity';
+import { ProductCategory } from './modules/category/entities/product-category.entity';
 
 @Module({
   imports: [
@@ -46,6 +45,7 @@ import { ProductVariantValue } from './modules/product-variant-value/entities/pr
       User,
       Product,
       Category,
+      ProductCategory,
       Order,
       OrderItem,
       Cart,
@@ -55,7 +55,6 @@ import { ProductVariantValue } from './modules/product-variant-value/entities/pr
       ProductAsset,
       ProductAttribute,
       ProductVariant,
-      ProductVariantValue,
     ]),
     MailerModule.forRootAsync({
       useFactory: () => ({
@@ -96,7 +95,6 @@ import { ProductVariantValue } from './modules/product-variant-value/entities/pr
     AuthModule,
     ProductAttributeModule,
     ProductVariantModule,
-    ProductVariantValueModule,
   ],
   controllers: [AppController],
   providers: [

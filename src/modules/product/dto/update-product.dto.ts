@@ -6,6 +6,7 @@ import {
   IsBoolean,
   ValidateNested,
   IsArray,
+  ArrayMinSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -51,21 +52,27 @@ export class UpdateProductDto {
   @IsOptional()
   description?: string;
 
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   discount?: number;
 
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   stock?: number;
 
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   sold?: number;
 
-  @IsNumber()
   @IsOptional()
-  categoryId?: number;
+  @IsArray()
+  @ArrayMinSize(1)
+  @Type(() => Number)
+  @IsNumber({}, { each: true })
+  category_ids: number[];
 
   @IsBoolean()
   @IsOptional()

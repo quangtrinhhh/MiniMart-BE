@@ -1,26 +1,24 @@
 import { CartItem } from 'src/modules/cartitem/entities/cartitem.entity';
-import { Category } from 'src/modules/category/entities/category.entity';
+import { ProductCategory } from 'src/modules/category/entities/product-category.entity';
 import { OrderItem } from 'src/modules/orderitem/entities/orderitem.entity';
 import { ProductAttribute } from 'src/modules/product-attribute/entities/product-attribute.entity';
 import { ProductVariant } from 'src/modules/product-variant/entities/product-variant.entity';
 import { ProductAsset } from 'src/modules/productasset/entities/productasset.entity';
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  ManyToOne,
-  JoinColumn,
-  OneToMany,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
 
 @Entity('product')
 export class Product {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => Category, (category) => category.products, { eager: true })
-  @JoinColumn({ name: 'category_id' })
-  category: Category;
+  @OneToMany(
+    () => ProductCategory,
+    (productCategory) => productCategory.product,
+    {
+      cascade: true,
+    },
+  )
+  productCategories: ProductCategory[];
 
   @Column({ type: 'varchar', length: 255 })
   name: string;
@@ -34,7 +32,7 @@ export class Product {
   @Column({ type: 'text', nullable: true })
   description: string;
 
-  @Column({ type: 'decimal', nullable: true })
+  @Column({ type: 'decimal', nullable: true, default: 0 })
   discount: number;
 
   @Column({ type: 'int', default: 0 })

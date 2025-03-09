@@ -1,5 +1,5 @@
-import { Product } from 'src/modules/product/entities/product.entity';
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { ProductCategory } from './product-category.entity';
 
 @Entity('category')
 export class Category {
@@ -27,6 +27,12 @@ export class Category {
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   updated_at: Date;
 
-  @OneToMany(() => Product, (product) => product.category)
-  products: Product[];
+  @OneToMany(
+    () => ProductCategory,
+    (productCategory) => productCategory.category,
+    {
+      cascade: true,
+    },
+  )
+  productCategories: ProductCategory[];
 }

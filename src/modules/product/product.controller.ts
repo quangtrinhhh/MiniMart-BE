@@ -20,7 +20,12 @@ import { Public } from 'src/decorator/customize';
 @Controller('product')
 export class ProductController {
   constructor(private readonly productService: ProductService) {}
-
+  @Get('/discounted')
+  @Public()
+  async getDiscountedProducts() {
+    return await this.productService.getDiscountedProducts();
+  }
+  /******************************************************************* */
   @UseInterceptors(FilesInterceptor('images', 5))
   @Post()
   async create(

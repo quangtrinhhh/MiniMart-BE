@@ -44,7 +44,6 @@ export class CategoryService {
 
   async findAll(query: string, current: number, pageSize: number) {
     const { filter, sort } = aqp(query);
-    console.log('Parsed filter:', filter);
 
     const skip = (current - 1) * pageSize;
     const where: FindOptionsWhere<Category>[] = [];
