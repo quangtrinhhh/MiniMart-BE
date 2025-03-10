@@ -1,5 +1,4 @@
 import {
-  BadGatewayException,
   BadRequestException,
   Injectable,
   NotFoundException,
@@ -8,7 +7,7 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { Category } from './entities/category.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, ILike, Repository } from 'typeorm';
+import { FindOptionsWhere, ILike, IsNull, Repository } from 'typeorm';
 import slugify from 'slugify';
 import aqp from 'api-query-params';
 import { ImageUploadConfig } from 'src/config/image-upload.config';
@@ -26,51 +25,77 @@ export class CategoryService {
     files: Express.Multer.File[],
   ) {
     if (files) {
-      // Nếu có file ảnh, upload ảnh lên và lấy URL
-
       const { link } = await this.imageUploadConfig.uploadImage(files[0]);
-      createCategoryDto.image = link; // Gán URL ảnh vào DTO
+      createCategoryDto.image = link;
     }
 
     const slug = slugify(createCategoryDto.name, {
       lower: true,
-      locale: 'vi', // Thử đặt locale thành tiếng Việt
-      remove: /[*+~.()'"!:@]/g, // Loại bỏ các ký tự đặc biệt
+      locale: 'vi',
+      remove: /[*+~.()'"!:@]/g,
     });
 
+    // Khởi tạo danh mục mới
     const category = this.categoryRepository.create({
       ...createCategoryDto,
       slug,
     });
+
+    // Nếu có `parentId`, tìm danh mục cha và gán vào
+    if (createCategoryDto.parentId) {
+      const parentCategory = await this.categoryRepository.findOne({
+        where: { id: createCategoryDto.parentId },
+      });
+
+      if (!parentCategory) {
+        throw new Error('Danh mục cha không tồn tại');
+      }
+
+      category.parent = parentCategory;
+    }
+
     const result = await this.categoryRepository.save(category);
     return { result };
   }
 
   async findAll(query: string, current: number, pageSize: number) {
     const { filter, sort } = aqp(query);
-
     const skip = (current - 1) * pageSize;
-    const where: FindOptionsWhere<Category>[] = [];
+    const where: FindOptionsWhere<Category> = {};
 
+    // 🔍 Tìm kiếm theo nhiều trường
     if (filter?.search) {
-      const searchValue = String(filter.search).trim(); // 🔄 Chuyển thành string nếu là số
+      const searchValue = String(filter.search).trim();
 
-      // 🔍 Tìm theo nhiều trường cùng lúc
-      where.push(
-        { id: Number(searchValue) || undefined }, // 🔍 Nếu search là số, tìm theo id
-        { name: ILike(`%${searchValue}%`) }, // 🔍 Tìm theo name
-        { status: searchValue === 'true' }, // 🔍 Tìm theo status (nếu nhập true/false)
-      );
+      where.name = ILike(`%${searchValue}%`); // Tìm theo tên danh mục
+
+      if (!isNaN(Number(searchValue))) {
+        where.id = Number(searchValue); // Tìm theo ID nếu là số hợp lệ
+      }
+
+      if (searchValue === 'true' || searchValue === 'false') {
+        where.status = searchValue === 'true'; // Lọc theo status (true/false)
+      }
     }
 
+    // 🔍 Chỉ lấy danh mục gốc (không có parent)
+    if (!filter?.parentId) {
+      where.parent = IsNull();
+    } else if (!isNaN(Number(filter?.parentId))) {
+      where.parent = { id: Number(filter.parentId) };
+    }
+
+    // Đếm tổng số danh mục phù hợp
     const totalItems = await this.categoryRepository.count({ where });
     const totalPages = Math.ceil(totalItems / pageSize);
 
+    // Lấy danh sách danh mục gốc kèm danh mục con
     const result = await this.categoryRepository.find({
       where,
       skip,
       take: pageSize,
       order: sort || { created_at: 'DESC' },
+      relations: ['children'], // Load danh mục con (Không load parent để tránh lặp)
     });
 
     return {
@@ -83,6 +108,7 @@ export class CategoryService {
   async findOne(id: number) {
     const category = await this.categoryRepository.findOne({
       where: { id: Number(id) },
+      relations: ['children'],
     });
     if (!category)
       throw new BadRequestException(`Không tìm thấy category có id là : ${id}`);
@@ -92,46 +118,71 @@ export class CategoryService {
   async update(
     id: number,
     updateCategoryDto: UpdateCategoryDto,
-    files: Express.Multer.File[],
+    files?: Express.Multer.File[],
   ) {
-    if (files) {
-      // Nếu có file ảnh, upload ảnh lên và lấy URL
-      const { link } = await this.imageUploadConfig.uploadImage(files[0]);
-      console.log('image:', link);
-
-      updateCategoryDto.image = link; // Gán URL ảnh vào DTO
-      console.log('updateCategoryDto.image:', updateCategoryDto.image);
-    }
-
-    // Kiểm tra nếu name có tồn tại, tạo slug
-    if (updateCategoryDto.name) {
-      const slug = slugify(updateCategoryDto.name, { lower: true });
-      updateCategoryDto.slug = slug; // Thêm slug vào DTO
-    }
-
-    const result = await this.categoryRepository.update(id, updateCategoryDto);
-
-    if (result.affected === 0) {
-      throw new NotFoundException('Category not found');
-    }
-
-    // Lấy lại dữ liệu category sau khi cập nhật
-    const updatedCategory = await this.categoryRepository.findOne({
+    // 🔍 Kiểm tra danh mục có tồn tại không trước khi cập nhật
+    const category = await this.categoryRepository.findOne({
       where: { id },
+      relations: ['parent', 'children'], // Load quan hệ nếu có
     });
 
-    if (!updatedCategory) {
-      throw new NotFoundException('Category not found');
+    if (!category) {
+      throw new NotFoundException(`Không tìm thấy danh mục có ID: ${id}`);
     }
 
-    return updatedCategory;
+    // 📸 Nếu có file ảnh, upload và cập nhật vào DTO
+    if (files?.length) {
+      const { link } = await this.imageUploadConfig.uploadImage(files[0]);
+      updateCategoryDto.image = link;
+    }
+
+    // 📝 Cập nhật slug nếu name thay đổi
+    if (updateCategoryDto.name && updateCategoryDto.name !== category.name) {
+      updateCategoryDto.slug = slugify(updateCategoryDto.name, { lower: true });
+    }
+
+    // 🛠 Tiến hành cập nhật
+    await this.categoryRepository.update(id, updateCategoryDto);
+
+    // 🔄 Trả về dữ liệu sau khi cập nhật (kèm quan hệ)
+    return await this.categoryRepository.findOne({
+      where: { id },
+      relations: ['parent', 'children'],
+    });
   }
 
   async remove(id: number) {
-    const category = await this.categoryRepository.delete(id);
-    if (category.affected === 0)
-      throw new BadGatewayException(`Không tìm thấy id`);
+    // Tìm danh mục cần xóa
+    const category = await this.categoryRepository.findOne({
+      where: { id },
+      relations: ['children'],
+    });
 
-    return `This action removes a #${id} category`;
+    if (!category) {
+      throw new NotFoundException(`Không tìm thấy danh mục có ID: ${id}`);
+    }
+
+    // Kiểm tra xem danh mục có danh mục con không
+    if (category.children && category.children.length > 0) {
+      throw new BadRequestException(
+        `Danh mục có danh mục con, vui lòng xóa danh mục con trước!`,
+      );
+    }
+
+    // Xóa danh mục
+    await this.categoryRepository.delete(id);
+
+    return {
+      message: `Đã xóa danh mục có ID: ${id}`,
+      success: true,
+    };
+  }
+
+  async getAllParentCategories() {
+    const result = await this.categoryRepository.find({
+      where: { parent: IsNull() },
+      take: 8,
+    });
+    return { result };
   }
 }

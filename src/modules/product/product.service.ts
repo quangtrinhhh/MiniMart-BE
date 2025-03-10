@@ -348,7 +348,7 @@ export class ProductService {
       await queryRunner.release();
     }
   }
-
+  /***** */
   async getDiscountedProducts(limit = 10) {
     const discountedProducts = await this.productRepository.find({
       where: { discount: MoreThan(0) },
@@ -358,6 +358,70 @@ export class ProductService {
 
     return { result: discountedProducts };
   }
+
+  async getProductsByCategory(categoryId: number) {
+    // Lấy danh sách category con nếu categoryId là cha
+    const category = await this.categoryRepository.findOne({
+      where: { id: categoryId },
+      relations: ['children'],
+    });
+
+    // Nếu danh mục cha không có con, trả về rỗng
+    if (!category || category.children.length === 0) {
+      return { result: [] };
+    }
+
+    // Lấy danh sách ID của danh mục con
+    const categoryIds = category.children.map((child) => child.id);
+
+    // Lấy tất cả danh mục con cùng với sản phẩm của chúng
+    const categoriesWithProducts = await this.categoryRepository.find({
+      where: { id: In(categoryIds) }, // Chỉ lấy danh mục con
+      relations: [
+        'productCategories',
+        'productCategories.product',
+        'productCategories.product.assets',
+        'productCategories.product.variants',
+      ],
+    });
+
+    // Định dạng dữ liệu đầu ra
+    const result = categoriesWithProducts.map((category) => ({
+      categoryId: category.id,
+      categoryName: category.name,
+      products: category.productCategories.map((pc) => ({
+        ...pc,
+      })),
+    }));
+
+    return { result };
+  }
+  // async getRelatedProducts(productId: number) {
+  //   // Tìm sản phẩm theo ID, kèm theo danh mục của nó
+  //   const product = await this.productRepository.findOne({
+  //     where: { id: productId },
+  //     relations: ['productCategories', 'productCategories.category'],
+  //   });
+
+  //   if (!product) throw new NotFoundException('Sản phẩm không tồn tại');
+
+  //   // Lấy ID danh mục đầu tiên của sản phẩm
+  //   const categoryId = product.productCategories[0]?.category?.id;
+  //   if (!categoryId) return [];
+
+  //   // Lấy các sản phẩm liên quan trong cùng danh mục (loại trừ sản phẩm hiện tại)
+  //   const relatedProducts = await this.productRepository.find({
+  //     where: {
+  //       id: Not(productId), // Không lấy chính sản phẩm đang xem
+  //       productCategories: { category: { id: categoryId } }, // Lấy cùng danh mục
+  //     },
+  //     relations: ['assets'], // Lấy thêm ảnh sản phẩm
+  //     take: 5, // Giới hạn 5 sản phẩm liên quan
+  //   });
+
+  //   return relatedProducts;
+  // }
+
   /**
    * ******************************************************************************
    */

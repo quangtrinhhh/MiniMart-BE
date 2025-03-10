@@ -19,11 +19,18 @@ import { RolesGuard } from 'src/auth/passport/roles.guard';
 import { Roles } from 'src/decorator/roles.decorator';
 import { RoleEnum } from 'src/common/enums/role.enum';
 import { JwtAuthGuard } from 'src/auth/passport/jwt-auth.guard';
+import { Public } from 'src/decorator/customize';
 
 @Controller('category')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
+
+  @Get('parentcategories')
+  @Public()
+  async getAllParentCategories() {
+    return this.categoryService.getAllParentCategories();
+  }
 
   @Roles(RoleEnum.ADMIN, RoleEnum.MANAGER) // Chỉ admin mới có thể truy cập
   @Post()

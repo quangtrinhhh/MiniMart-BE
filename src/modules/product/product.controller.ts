@@ -25,6 +25,17 @@ export class ProductController {
   async getDiscountedProducts() {
     return await this.productService.getDiscountedProducts();
   }
+  @Get('/:id/categorie')
+  @Public()
+  async getProductsByCategory(@Param('id') categoryId: number) {
+    return await this.productService.getProductsByCategory(categoryId);
+  }
+
+  // @Get('/:id/related')
+  // @Public()
+  // async getRelatedProducts(@Param('id') productId: number) {
+  //   return await this.productService.getRelatedProducts(productId);
+  // }
   /******************************************************************* */
   @UseInterceptors(FilesInterceptor('images', 5))
   @Post()

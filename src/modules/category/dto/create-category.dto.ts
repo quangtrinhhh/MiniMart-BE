@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsNotEmpty, IsOptional, IsNumber } from 'class-validator';
 
 export class CreateCategoryDto {
   @IsNotEmpty()
@@ -12,4 +13,9 @@ export class CreateCategoryDto {
 
   @IsOptional()
   image: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  parentId?: number; // ID của danh mục cha (nếu có)
 }
