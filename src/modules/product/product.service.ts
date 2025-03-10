@@ -135,13 +135,8 @@ export class ProductService {
       await queryRunner.release();
     }
   }
-
   /**
    *
-   * @param query
-   * @param current
-   * @param pageSize
-   * @returns
    */
   async findAll(query: string, current = 1, pageSize = 10) {
     const { filter, sort } = aqp(query);

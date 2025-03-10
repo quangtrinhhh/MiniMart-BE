@@ -32,7 +32,11 @@ export class CategoryService {
       createCategoryDto.image = link; // Gán URL ảnh vào DTO
     }
 
-    const slug = slugify(createCategoryDto.name, { lower: true });
+    const slug = slugify(createCategoryDto.name, {
+      lower: true,
+      locale: 'vi', // Thử đặt locale thành tiếng Việt
+      remove: /[*+~.()'"!:@]/g, // Loại bỏ các ký tự đặc biệt
+    });
 
     const category = this.categoryRepository.create({
       ...createCategoryDto,
