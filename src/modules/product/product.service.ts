@@ -15,7 +15,6 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import aqp from 'api-query-params';
 import { ImageUploadConfig } from 'src/config/image-upload.config';
 import { AssetsService } from '../assets/assets.service';
-import { ProductAttribute } from '../product-attribute/entities/product-attribute.entity';
 import { ProductVariant } from '../product-variant/entities/product-variant.entity';
 import { ProductCategory } from '../category/entities/product-category.entity';
 
@@ -28,10 +27,9 @@ export class ProductService {
     private categoryRepository: Repository<Category>,
     @InjectRepository(ProductAsset)
     private productAssetRepository: Repository<ProductAsset>,
-    @InjectRepository(ProductAttribute)
-    private productAttributeRepository: Repository<ProductAttribute>,
-    @InjectRepository(ProductVariant)
-    private productVariantRepository: Repository<ProductVariant>,
+    @InjectRepository(ProductCategory)
+    private productCategoryRepository: Repository<ProductCategory>,
+
     private readonly imageUploadConfig: ImageUploadConfig,
     private readonly assetsService: AssetsService,
     private dataSource: DataSource,
@@ -396,31 +394,39 @@ export class ProductService {
 
     return { result };
   }
-  // async getRelatedProducts(productId: number) {
-  //   // Tìm sản phẩm theo ID, kèm theo danh mục của nó
-  //   const product = await this.productRepository.findOne({
-  //     where: { id: productId },
-  //     relations: ['productCategories', 'productCategories.category'],
-  //   });
 
-  //   if (!product) throw new NotFoundException('Sản phẩm không tồn tại');
+  async getRelatedProducts(
+    productId: number,
+    limit: number = 4,
+  ): Promise<{ result: Product[] }> {
+    const productCategories = await this.productCategoryRepository.find({
+      where: { product: { id: productId } },
+      relations: ['category'],
+    });
 
-  //   // Lấy ID danh mục đầu tiên của sản phẩm
-  //   const categoryId = product.productCategories[0]?.category?.id;
-  //   if (!categoryId) return [];
+    if (!productCategories.length) {
+      return { result: [] };
+    }
 
-  //   // Lấy các sản phẩm liên quan trong cùng danh mục (loại trừ sản phẩm hiện tại)
-  //   const relatedProducts = await this.productRepository.find({
-  //     where: {
-  //       id: Not(productId), // Không lấy chính sản phẩm đang xem
-  //       productCategories: { category: { id: categoryId } }, // Lấy cùng danh mục
-  //     },
-  //     relations: ['assets'], // Lấy thêm ảnh sản phẩm
-  //     take: 5, // Giới hạn 5 sản phẩm liên quan
-  //   });
+    const categoryIds = productCategories.map((pc) => pc.category.id);
 
-  //   return relatedProducts;
-  // }
+    const products = await this.productRepository
+      .createQueryBuilder('product')
+      .leftJoinAndSelect('product.productCategories', 'pc')
+      .leftJoinAndSelect('pc.category', 'category')
+      .leftJoinAndSelect('product.assets', 'assets')
+      .leftJoinAndSelect('assets.asset', 'asset')
+      .leftJoinAndSelect('product.variants', 'variants')
+      .leftJoinAndSelect('product.attributes', 'attributes')
+      .where('pc.category_id IN (:...categoryIds)', { categoryIds })
+      .andWhere('product.id != :productId', { productId })
+      .andWhere('product.status = true')
+      .orderBy('RANDOM()')
+      .limit(limit)
+      .getMany();
+
+    return { result: products };
+  }
 
   /**
    * ******************************************************************************

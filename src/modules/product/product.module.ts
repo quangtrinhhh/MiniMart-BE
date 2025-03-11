@@ -11,6 +11,7 @@ import { ImageUploadConfig } from 'src/config/image-upload.config';
 import { AssetsService } from '../assets/assets.service';
 import { ProductAttribute } from '../product-attribute/entities/product-attribute.entity';
 import { ProductVariant } from '../product-variant/entities/product-variant.entity';
+import { ProductCategory } from '../category/entities/product-category.entity';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { ProductVariant } from '../product-variant/entities/product-variant.enti
       Category,
       ProductAttribute,
       ProductVariant,
+      ProductCategory,
     ]),
   ],
 
