@@ -185,4 +185,11 @@ export class CategoryService {
     });
     return { result };
   }
+  async getAllChillCategories() {
+    const result = await this.categoryRepository.find({
+      where: { parent: IsNull() },
+      take: 8,
+    });
+    return { result };
+  }
 }
