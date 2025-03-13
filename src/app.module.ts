@@ -36,6 +36,7 @@ import { ProductAttribute } from './modules/product-attribute/entities/product-a
 import { ProductVariantModule } from './modules/product-variant/product-variant.module';
 import { ProductVariant } from './modules/product-variant/entities/product-variant.entity';
 import { ProductCategory } from './modules/category/entities/product-category.entity';
+import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
   imports: [
@@ -80,6 +81,10 @@ import { ProductCategory } from './modules/category/entities/product-category.en
           },
         },
       }),
+    }),
+    CacheModule.register({
+      ttl: 86400, // Cache 24h
+      isGlobal: true, // Dùng cho toàn bộ app
     }),
     CouponsModule,
     UsersModule,

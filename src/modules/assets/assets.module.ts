@@ -3,12 +3,12 @@ import { AssetsService } from './assets.service';
 import { AssetsController } from './assets.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Asset } from './entities/asset.entity';
-import { ImageUploadConfig } from 'src/config/image-upload.config';
+import { ImageUploadService } from 'src/services/image-upload.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Asset])],
   controllers: [AssetsController],
-  providers: [AssetsService, ImageUploadConfig],
+  providers: [AssetsService, ImageUploadService],
   exports: [AssetsService],
 })
 export class AssetsModule {}

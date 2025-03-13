@@ -10,14 +10,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, ILike, IsNull, Repository } from 'typeorm';
 import slugify from 'slugify';
 import aqp from 'api-query-params';
-import { ImageUploadConfig } from 'src/config/image-upload.config';
+import { ImageUploadService } from 'src/services/image-upload.service';
 
 @Injectable()
 export class CategoryService {
   constructor(
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>,
-    private readonly imageUploadConfig: ImageUploadConfig,
+    private readonly imageUploadService: ImageUploadService,
   ) {}
 
   async create(
@@ -25,7 +25,7 @@ export class CategoryService {
     files: Express.Multer.File[],
   ) {
     if (files) {
-      const { link } = await this.imageUploadConfig.uploadImage(files[0]);
+      const { link } = await this.imageUploadService.uploadImage(files[0]);
       createCategoryDto.image = link;
     }
 
@@ -132,7 +132,7 @@ export class CategoryService {
 
     // 📸 Nếu có file ảnh, upload và cập nhật vào DTO
     if (files?.length) {
-      const { link } = await this.imageUploadConfig.uploadImage(files[0]);
+      const { link } = await this.imageUploadService.uploadImage(files[0]);
       updateCategoryDto.image = link;
     }
 

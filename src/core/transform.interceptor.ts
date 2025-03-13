@@ -5,9 +5,11 @@ import {
   CallHandler,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { response } from 'express';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { RESPONSE_MESSAGE } from 'src/decorator/customize';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export interface Response<T> {
   statusCode: number;
   message?: string;
@@ -24,11 +26,11 @@ export class TransformInterceptor<T>
   ): Observable<Response<T>> {
     return next.handle().pipe(
       map((data) => ({
-        statusCode: context.switchToHttp().getResponse().statusCode,
+        statusCode: response.statusCode,
         message:
           this.reflector.get<string>(RESPONSE_MESSAGE, context.getHandler()) ||
           '',
-        data: data,
+        data: data as T,
       })),
     );
   }

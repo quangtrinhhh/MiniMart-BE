@@ -7,11 +7,11 @@ import { ProductAsset } from '../productasset/entities/productasset.entity';
 import { Asset } from '../assets/entities/asset.entity';
 import { Category } from '../category/entities/category.entity';
 
-import { ImageUploadConfig } from 'src/config/image-upload.config';
 import { AssetsService } from '../assets/assets.service';
 import { ProductAttribute } from '../product-attribute/entities/product-attribute.entity';
 import { ProductVariant } from '../product-variant/entities/product-variant.entity';
 import { ProductCategory } from '../category/entities/product-category.entity';
+import { ImageUploadService } from 'src/services/image-upload.service';
 
 @Module({
   imports: [
@@ -27,6 +27,6 @@ import { ProductCategory } from '../category/entities/product-category.entity';
   ],
 
   controllers: [ProductController],
-  providers: [ProductService, ImageUploadConfig, AssetsService],
+  providers: [ProductService, AssetsService, ImageUploadService],
 })
 export class ProductModule {}

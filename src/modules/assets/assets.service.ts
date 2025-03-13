@@ -2,14 +2,14 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
 import { Asset } from './entities/asset.entity';
-import { ImageUploadConfig } from 'src/config/image-upload.config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ImageUploadService } from 'src/services/image-upload.service';
 
 @Injectable()
 export class AssetsService {
   constructor(
-    private readonly imageUploadConfig: ImageUploadConfig,
+    private readonly imageUploadService: ImageUploadService,
     @InjectRepository(Asset) private assetRepository: Repository<Asset>,
   ) {}
 
@@ -38,22 +38,31 @@ export class AssetsService {
   }
 
   async uploadImages(files: Express.Multer.File[]): Promise<Asset[]> {
-    const assets: Asset[] = [];
-    for (const file of files) {
-      const { link, type, size } =
-        await this.imageUploadConfig.uploadImage(file);
-      const asset = this.assetRepository.create({
-        filename: file.originalname,
-        path: link,
-        type: type,
-        size: size,
-      });
-      assets.push(asset);
+    if (!files || files.length === 0) {
+      throw new BadRequestException('Không có file nào để upload');
     }
-    await this.assetRepository.save(assets);
-    if (!assets || assets.length === 0) {
+
+    // Upload tất cả ảnh cùng lúc
+    const uploadedImages = await Promise.all(
+      files.map(async (file) => {
+        const { link, type, size } =
+          await this.imageUploadService.uploadImage(file);
+        return this.assetRepository.create({
+          filename: file.originalname,
+          path: link,
+          type,
+          size,
+        });
+      }),
+    );
+
+    // Lưu vào database nếu có ảnh hợp lệ
+    if (uploadedImages.length === 0) {
       throw new BadRequestException('Không thể upload ảnh');
     }
-    return assets;
+
+    await this.assetRepository.save(uploadedImages);
+
+    return uploadedImages;
   }
 }

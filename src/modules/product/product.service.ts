@@ -13,10 +13,10 @@ import { Category } from '../category/entities/category.entity';
 import slugify from 'slugify';
 import { UpdateProductDto } from './dto/update-product.dto';
 import aqp from 'api-query-params';
-import { ImageUploadConfig } from 'src/config/image-upload.config';
 import { AssetsService } from '../assets/assets.service';
 import { ProductVariant } from '../product-variant/entities/product-variant.entity';
 import { ProductCategory } from '../category/entities/product-category.entity';
+import { ImageUploadService } from 'src/services/image-upload.service';
 
 @Injectable()
 export class ProductService {
@@ -30,8 +30,8 @@ export class ProductService {
     @InjectRepository(ProductCategory)
     private productCategoryRepository: Repository<ProductCategory>,
 
-    private readonly imageUploadConfig: ImageUploadConfig,
     private readonly assetsService: AssetsService,
+    private readonly imageUploadService: ImageUploadService,
     private dataSource: DataSource,
   ) {}
 
@@ -40,9 +40,16 @@ export class ProductService {
     files: Express.Multer.File[],
   ) {
     const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
+      // ✅ Upload ảnh trước khi bắt đầu transaction (tránh rollback do upload lỗi)
+      const assets = await this.assetsService.uploadImages(files);
+      if (!assets.length) {
+        throw new BadRequestException('❌ Không có ảnh nào được tải lên.');
+      }
+
       // ✅ Kiểm tra danh mục sản phẩm
       const categories = await this.categoryRepository.findBy({
         id: In(createProductDto.category_ids),
@@ -59,10 +66,8 @@ export class ProductService {
         throw new BadRequestException('Tên sản phẩm đã tồn tại.');
       }
 
-      // ✅ Tạo slug sản phẩm
+      // ✅ Tạo slug & sản phẩm
       const slug = slugify(createProductDto.name, { lower: true });
-
-      // ✅ Tạo sản phẩm
       let product = queryRunner.manager.create(Product, {
         ...createProductDto,
         slug,
@@ -76,16 +81,15 @@ export class ProductService {
       );
       await queryRunner.manager.save(productCategories);
 
-      // ✅ Xử lý biến thể sản phẩm (ProductVariant)
+      // ✅ Xử lý biến thể sản phẩm
       if (createProductDto.variants?.length) {
-        const variants: ProductVariant[] = [];
-        for (const variantDto of createProductDto.variants) {
+        const variants = createProductDto.variants.map((variantDto) => {
           const variant = queryRunner.manager.create(ProductVariant, {
             ...variantDto,
             product,
           });
 
-          // ✅ Lấy `category_id` từ danh mục đầu tiên hoặc tự chọn danh mục phù hợp
+          // ✅ Lấy `category_id` từ danh mục đầu tiên hoặc danh mục phù hợp
           variant.SKU = this.generateSKU(
             categories[0]?.id || 0,
             product.id,
@@ -93,31 +97,22 @@ export class ProductService {
             variant.name,
           );
 
-          await queryRunner.manager.save(variant);
-          variants.push(variant);
-        }
-        console.log('✅ Tạo biến thể sản phẩm thành công.');
-      }
+          return variant;
+        });
 
-      // ✅ Upload ảnh
-      let assets: Asset[] = [];
-      try {
-        assets = await this.assetsService.uploadImages(files);
-        if (!assets.length)
-          throw new BadRequestException('❌ Không có ảnh nào được tải lên.');
-      } catch (error) {
-        throw new BadRequestException(`❌ Upload ảnh thất bại: ${error}`);
+        await queryRunner.manager.save(variants);
+        console.log('✅ Tạo biến thể sản phẩm thành công.');
       }
 
       // ✅ Tạo liên kết sản phẩm - ảnh
       const productAssets = assets.map((asset) =>
-        this.productAssetRepository.create({
+        queryRunner.manager.create(ProductAsset, {
           product,
           asset,
           type: 'gallery',
         }),
       );
-      await queryRunner.manager.save(ProductAsset, productAssets);
+      await queryRunner.manager.save(productAssets);
       console.log('🚀 Tạo productAssets thành công.');
 
       // ✅ Commit giao dịch
@@ -133,6 +128,7 @@ export class ProductService {
       await queryRunner.release();
     }
   }
+
   /**
    *
    */
@@ -162,13 +158,28 @@ export class ProductService {
   async findOne(slug: string) {
     const product = await this.productRepository.findOne({
       where: { slug: slug },
-      relations: ['productCategories', 'attributes', 'variants'],
+      relations: [
+        'productCategories',
+        'productCategories.category',
+        'attributes',
+        'variants',
+      ],
     });
 
     if (!product) throw new BadGatewayException('Không tìm thấy product');
 
+    // Transform the productCategories to categories
+    const transformedProduct = {
+      ...product,
+      categories: product.productCategories.map((pc) => pc.category),
+    };
+
+    // Create a new object without the productCategories field
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { productCategories, ...result } = transformedProduct;
+
     return {
-      result: product,
+      result: result,
     };
   }
 
@@ -259,9 +270,8 @@ export class ProductService {
         if (existingAsset) {
           await queryRunner.manager.delete(Asset, existingAsset.id);
         }
-
         const { link, type, size } =
-          await this.imageUploadConfig.uploadImage(file);
+          await this.imageUploadService.uploadImage(file);
         const newAsset = queryRunner.manager.create(Asset, {
           filename: file.originalname,
           path: link,
