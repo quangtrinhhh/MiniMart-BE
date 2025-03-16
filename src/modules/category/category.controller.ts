@@ -42,7 +42,7 @@ export class CategoryController {
     return this.categoryService.create(createCategoryDto, file);
   }
 
-  @Roles(RoleEnum.ADMIN, RoleEnum.MANAGER)
+  @Public()
   @Get()
   findAll(
     @Query() query: string,

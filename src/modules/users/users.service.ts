@@ -171,7 +171,7 @@ export class UsersService {
         activationCode: codeID,
       },
     });
-    return { _id: user.id };
+    return { id: user.id };
   }
 
   async handleActive(data: CodeAuthDto) {
@@ -223,7 +223,7 @@ export class UsersService {
         activationCode: codeID,
       },
     });
-    return { data: `Code đã được gửi lại ${email}` };
+    return { id: user.id };
   }
 
   private async createAdminAccount() {
