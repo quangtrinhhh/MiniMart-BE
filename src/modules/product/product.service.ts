@@ -362,6 +362,7 @@ export class ProductService {
       where: { discount: MoreThan(0) },
       order: { discount: 'DESC' },
       take: limit,
+      relations: ['variants'],
     });
 
     return { result: discountedProducts };

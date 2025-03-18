@@ -1,42 +1,55 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Patch,
-  Param,
+  Controller,
   Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  UseGuards,
 } from '@nestjs/common';
 import { CartService } from './cart.service';
-import { CreateCartDto } from './dto/create-cart.dto';
-import { UpdateCartDto } from './dto/update-cart.dto';
+import { AddToCartDto } from './dto/cart.dto';
+import { AuthGuard } from '@nestjs/passport';
+import { GetUser } from 'src/decorator/user.decorator';
 
 @Controller('cart')
+@UseGuards(AuthGuard('jwt'))
 export class CartController {
   constructor(private readonly cartService: CartService) {}
 
   @Post()
-  create(@Body() createCartDto: CreateCartDto) {
-    return this.cartService.create(createCartDto);
+  async addToCart(
+    @GetUser('_id') userId: number,
+    @Body() addToCartDto: AddToCartDto,
+  ) {
+    return this.cartService.addToCart(userId, addToCartDto);
   }
 
   @Get()
-  findAll() {
-    return this.cartService.findAll();
+  async getAllCart(@GetUser('_id') userId: number) {
+    return this.cartService.getAllCart(userId);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.cartService.findOne(+id);
+  @Delete(':cartItemId')
+  async removeFromCart(
+    @GetUser('_id') userId: number,
+    @Param('cartItemId') cartItemId: number,
+  ) {
+    return this.cartService.removeFromCart(userId, Number(cartItemId));
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateCartDto: UpdateCartDto) {
-    return this.cartService.update(+id, updateCartDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.cartService.remove(+id);
+  @Patch(':cartItemId')
+  async updateCartItemQuantity(
+    @GetUser('_id') userId: number,
+    @Param('cartItemId', ParseIntPipe) cartItemId: number,
+    @Body('quantity', ParseIntPipe) quantity: number, // Lấy quantity từ body
+  ) {
+    return this.cartService.updateCartItemQuantity(
+      userId,
+      cartItemId,
+      quantity,
+    );
   }
 }

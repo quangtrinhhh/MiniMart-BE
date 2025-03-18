@@ -5,8 +5,10 @@ import {
   ManyToOne,
   CreateDateColumn,
   Index,
+  OneToMany,
 } from 'typeorm';
 import { Product } from 'src/modules/product/entities/product.entity';
+import { CartItem } from 'src/modules/cartitem/entities/cartitem.entity';
 
 @Entity('product_variants')
 export class ProductVariant {
@@ -34,4 +36,7 @@ export class ProductVariant {
 
   @CreateDateColumn()
   created_at: Date;
+
+  @OneToMany(() => CartItem, (cartItem) => cartItem.product)
+  cartItems: CartItem[]; // Mối quan hệ OneToMany với CartItem
 }

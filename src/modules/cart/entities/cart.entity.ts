@@ -25,7 +25,7 @@ export class Cart {
   updated_at: Date;
 
   @ManyToOne(() => User, (user) => user.carts)
-  @JoinColumn({ name: 'Users_id' })
+  @JoinColumn({ name: 'user_id' })
   user: User;
 
   @OneToMany(() => CartItem, (cartItem) => cartItem.cart)
