@@ -40,7 +40,9 @@ export class CartService {
           where: { id: variantId },
           relations: ['product'],
         });
-
+        if (variant?.product.id !== productId) {
+          throw new BadRequestException('Biến thể không thuộc về sản phẩm này');
+        }
         if (!variant)
           throw new NotFoundException('Biến thể sản phẩm không tồn tại');
 
@@ -195,5 +197,25 @@ export class CartService {
     await this.cartItemRepository.save(cartItem);
 
     return { quantity: cartItem.quantity };
+  }
+
+  async getCartByUserId(userId: number): Promise<Cart> {
+    const cart = await this.cartRepository.findOne({
+      where: { user: { id: userId } },
+      relations: ['cartItems', 'cartItems.product', 'cartItems.variant'],
+    });
+
+    if (!cart) {
+      throw new NotFoundException('Cart not found');
+    }
+
+    return cart;
+  }
+
+  async clearCart(userId: number): Promise<void> {
+    const cart = await this.getCartByUserId(userId);
+    if (!cart.cartItems.length) return;
+
+    await this.cartItemRepository.delete({ cart: { id: cart.id } });
   }
 }
