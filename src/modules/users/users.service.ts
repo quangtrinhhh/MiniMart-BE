@@ -40,6 +40,16 @@ export class UsersService {
     });
     return !!userEmail;
   }
+  async isPhoneExist(phone: string): Promise<boolean> {
+    if (!phone) return false; // Kiểm tra input trước khi truy vấn DB
+
+    const user = await this.userRepository.findOne({
+      where: { phone_number: phone },
+      select: ['id'], // Chỉ lấy `id`, tránh tải toàn bộ dữ liệu không cần thiết
+    });
+
+    return Boolean(user);
+  }
 
   async create(createUserDto: CreateUserDto) {
     const { email, password, last_name, first_name, phone_number } =
@@ -138,6 +148,11 @@ export class UsersService {
     const { email, password, last_name, first_name, phone_number } =
       registerDTO;
     const isExist = await this.isEmailExist(email);
+    const isPhoneExist = await this.isPhoneExist(phone_number);
+    if (isPhoneExist == true)
+      throw new BadRequestException(
+        `Số điện thoại ${phone_number} đã tồn tại. Vui lòng điền số điện thoại khác`,
+      );
     if (isExist == true) {
       throw new BadRequestException(
         `Email đã tồn tại : ${email}. Vui lòng điền email khác`,

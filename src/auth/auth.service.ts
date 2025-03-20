@@ -30,6 +30,7 @@ export class AuthService {
         email: user.email,
         isVerify: user.isActive,
         role: user.role,
+        phone: user.phone_number,
       },
       access_token: this.jwtService.sign(payload),
     };

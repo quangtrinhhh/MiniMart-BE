@@ -1,3 +1,8 @@
+import {
+  OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+} from 'src/enums/order-status.enum';
 import { OrderItem } from 'src/modules/orderitem/entities/orderitem.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import {
@@ -14,11 +19,25 @@ export class Order {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'varchar', length: 255 })
-  status: string;
+  @Column({ type: 'enum', enum: OrderStatus, default: OrderStatus.PENDING })
+  status: OrderStatus;
 
   @Column({ type: 'decimal', precision: 18, scale: 2, nullable: true })
   shipping_fee: number;
+
+  @Column({ type: 'text' })
+  shipping_address: string;
+  @Column({ type: 'enum', enum: PaymentMethod, default: PaymentMethod.COD })
+  payment_method: PaymentMethod;
+
+  @Column({ type: 'enum', enum: PaymentStatus, default: PaymentStatus.PENDING })
+  payment_status: PaymentStatus;
+
+  @Column({ type: 'text', nullable: true })
+  note: string;
+
+  @Column({ type: 'varchar', length: 255 })
+  consignee_name: string;
 
   @Column({ type: 'decimal', precision: 18, scale: 2 })
   total: number;

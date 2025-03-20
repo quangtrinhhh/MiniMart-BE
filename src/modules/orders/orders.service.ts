@@ -12,6 +12,8 @@ import { CartService } from '../cart/cart.service';
 import { User } from '../users/entities/user.entity';
 import { ProductVariant } from '../product-variant/entities/product-variant.entity';
 import { Product } from '../product/entities/product.entity';
+import { OrderStatus } from 'src/enums/order-status.enum';
+import { CreateOrderDto } from './dto/create-order.dto';
 
 @Injectable()
 export class OrdersService {
@@ -24,19 +26,27 @@ export class OrdersService {
     private readonly cartService: CartService,
     private readonly dataSource: DataSource,
   ) {}
-  async createOrder(userId: number): Promise<unknown> {
+  async createOrder(
+    userId: number,
+    createOrderDto: CreateOrderDto,
+  ): Promise<unknown> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
+      const {
+        shipping_address,
+        payment_method,
+        note,
+        shipping_fee,
+        consignee_name,
+      } = createOrderDto;
       // ✅ Lấy thông tin user
       const user = await queryRunner.manager.findOne(User, {
         where: { id: userId },
       });
       if (!user) throw new NotFoundException('User not found');
-      // if (!user.address || !user.city || !user.country)
-      //   throw new NotFoundException('User address is incomplete');
 
       // ✅ Lấy giỏ hàng
       const cart = await this.cartService.getCartByUserId(userId);
@@ -46,102 +56,95 @@ export class OrdersService {
 
       // ✅ Tính tổng giá trị đơn hàng
       const total = cart.cartItems.reduce(
-        (sum, item) => sum + parseFloat(String(item.price)) * item.quantity,
+        (sum, item) => sum + (Number(item.price) || 0) * item.quantity,
         0,
       );
 
       // ✅ Tạo đơn hàng
-      let order = queryRunner.manager.create(Order, {
-        user,
-        status: 'pending',
-        shipping_fee: 0,
-        total,
-      });
-      order = await queryRunner.manager.save(order);
+      const order = await queryRunner.manager.save(
+        queryRunner.manager.create(Order, {
+          user,
+          status: OrderStatus.PENDING,
+          shipping_fee,
+          total: total + (shipping_fee ?? 0),
+          shipping_address,
+          payment_method,
+          note,
+          consignee_name:
+            consignee_name ?? user.first_name + ' ' + user.last_name,
+        }),
+      );
       console.log('✅ Tạo đơn hàng thành công:', order.id);
 
       // ✅ Xử lý từng sản phẩm trong giỏ hàng
-      for (const item of cart.cartItems) {
-        if (!item.product) {
-          throw new NotFoundException(`Product not found`);
-        }
+      await Promise.all(
+        cart.cartItems.map(async (item) => {
+          if (!item.product) {
+            throw new NotFoundException(`Product not found`);
+          }
 
-        console.log(`🛒 Cart Item:`, item);
+          console.log(`🛒 Cart Item:`, item);
 
-        // ✅ Lấy sản phẩm chính (không JOIN variants)
-        const product = await queryRunner.manager
-          .createQueryBuilder(Product, 'product')
-          .where('product.id = :id', { id: item.product.id })
-          .setLock('pessimistic_write') // Tránh race condition
-          .getOne();
-
-        if (!product) throw new NotFoundException(`Product not found`);
-
-        if (item.variant) {
-          // ✅ Lấy biến thể chính xác từ database
-          const variant = await queryRunner.manager
-            .createQueryBuilder(ProductVariant, 'variant')
-            .where('variant.id = :id', { id: item.variant.id })
+          // ✅ Lấy sản phẩm chính
+          const product = await queryRunner.manager
+            .createQueryBuilder(Product, 'product')
+            .where('product.id = :id', { id: item.product.id })
             .setLock('pessimistic_write')
             .getOne();
 
-          if (!variant) throw new NotFoundException(`Variant not found`);
+          if (!product) throw new NotFoundException(`Product not found`);
 
-          console.log(
-            `🔥 Variant Before: ${variant.name} - Stock: ${variant.stock}`,
-          );
+          let variant: ProductVariant | null = null;
+          if (item.variant) {
+            // ✅ Lấy biến thể chính xác từ database
+            variant = await queryRunner.manager
+              .createQueryBuilder(ProductVariant, 'variant')
+              .where('variant.id = :id', { id: item.variant.id })
+              .setLock('pessimistic_write')
+              .getOne();
 
-          if (variant.stock < item.quantity) {
-            throw new BadRequestException(
-              `Variant ${variant.name} is out of stock`,
-            );
-          }
+            if (!variant) throw new NotFoundException(`Variant not found`);
 
-          // ✅ Trừ stock của biến thể
-          variant.stock -= item.quantity;
-          await queryRunner.manager.save(variant);
+            if (variant.stock < item.quantity) {
+              throw new BadRequestException(
+                `Variant ${variant.name} is out of stock`,
+              );
+            }
 
-          console.log(
-            `✅ Variant After: ${variant.name} - Stock: ${variant.stock}`,
-          );
+            // ✅ Trừ stock của biến thể
+            variant.stock -= item.quantity;
+          } else {
+            if (product.stock < item.quantity) {
+              throw new BadRequestException(
+                `Product ${product.name} is out of stock`,
+              );
+            }
 
-          // ✅ Nếu bạn muốn giảm tổng stock của product theo biến thể
-          if (product.stock >= item.quantity) {
+            // ✅ Trừ stock của sản phẩm chính
             product.stock -= item.quantity;
-            await queryRunner.manager.save(product);
-          }
-        } else {
-          console.log(
-            `🔥 Product Before: ${product.name} - Stock: ${product.stock}`,
-          );
-
-          if (product.stock < item.quantity) {
-            throw new BadRequestException(
-              `Product ${product.name} is out of stock`,
-            );
           }
 
-          // ✅ Trừ stock của sản phẩm chính (chỉ khi không có biến thể)
-          product.stock -= item.quantity;
-          await queryRunner.manager.save(product);
+          // ✅ Cập nhật sản phẩm
+          product.sold += item.quantity;
 
-          console.log(
-            `✅ Product After: ${product.name} - Stock: ${product.stock}`,
+          await Promise.all([
+            queryRunner.manager.save(product),
+            variant ? queryRunner.manager.save(variant) : Promise.resolve(),
+          ]);
+
+          // ✅ Tạo OrderItem
+          await queryRunner.manager.save(
+            queryRunner.manager.create(OrderItem, {
+              order,
+              product: item.product,
+              variant: item.variant || null,
+              name: item.product.name,
+              quantity: item.quantity,
+              price: Number(item.price) || 0,
+            }),
           );
-        }
-
-        // ✅ Tạo OrderItem
-        const orderItem = queryRunner.manager.create(OrderItem, {
-          order,
-          product: item.product,
-          variant: item.variant || null, // Nếu có biến thể, lưu lại
-          name: item.product.name,
-          quantity: item.quantity,
-          price: parseFloat(String(item.price)),
-        });
-
-        await queryRunner.manager.save(orderItem);
-      }
+        }),
+      );
 
       // ✅ Xóa giỏ hàng
       await this.cartService.clearCart(userId);
@@ -159,14 +162,21 @@ export class OrdersService {
         canceled_at: order.canceled_at,
         completed_at: order.completed_at,
         delivery_at: order.delivery_at,
-        user_id: order.user.id,
+        user: {
+          id: order.user.id,
+          email: order.user.email,
+          phone_number: order.user.phone_number,
+        },
       };
     } catch (error) {
-      // ❌ Rollback nếu có lỗi
       await queryRunner.rollbackTransaction();
       console.error('❌ Lỗi khi đặt hàng:', error);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      throw new BadRequestException(`Lỗi khi đặt hàng: ${error.message}`);
+
+      // Kiểm tra nếu error có kiểu Error
+      const errorMessage =
+        error instanceof Error ? error.message : 'Lỗi không xác định';
+
+      throw new BadRequestException(`Lỗi khi đặt hàng: ${errorMessage}`);
     } finally {
       await queryRunner.release();
     }
@@ -175,25 +185,40 @@ export class OrdersService {
   async getAllOrders(): Promise<Order[]> {
     return this.orderRepository.find({
       relations: ['user', 'orderItems', 'orderItems.product'],
+      select: {
+        id: true,
+        status: true,
+        shipping_fee: true,
+        total: true,
+        created_at: true,
+        user: {
+          id: true,
+          email: true,
+          phone_number: true,
+        },
+      },
       order: { created_at: 'DESC' }, // Sắp xếp đơn hàng mới nhất lên đầu
     });
   }
 
   async cancelOrder(userId: number, orderId: number): Promise<Order> {
+    const user = await this.usersService.findOne(userId);
+    if (!user) throw new NotFoundException('User không tồn tại');
+
     const order = await this.orderRepository.findOne({
-      where: { id: orderId, user: { id: userId } },
+      where: { id: orderId, user: { id: user.id } },
     });
 
     if (!order) {
       throw new NotFoundException('Order not found');
     }
 
-    if (order.status !== 'pending') {
+    if (order.status !== OrderStatus.PENDING) {
       throw new BadRequestException('Only pending orders can be canceled');
     }
 
     // Cập nhật trạng thái đơn hàng
-    order.status = 'canceled';
+    order.status = OrderStatus.CANCELED;
     order.canceled_at = new Date();
 
     return await this.orderRepository.save(order);

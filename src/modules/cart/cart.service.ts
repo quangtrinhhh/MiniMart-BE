@@ -98,9 +98,7 @@ export class CartService {
     });
   }
 
-  async getAllCart(
-    userId: number,
-  ): Promise<{ cart: Cart | null; totalPrice: number }> {
+  async getAllCart(userId: number): Promise<unknown> {
     const cart = await this.cartRepository.findOne({
       where: { user: { id: userId } },
       relations: [
@@ -128,6 +126,7 @@ export class CartService {
       },
     });
 
+    if (!cart) return { cart: [], totalPrice: 0 };
     let totalPrice = 0;
 
     if (cart) {

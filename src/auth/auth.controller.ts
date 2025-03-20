@@ -17,6 +17,7 @@ export class AuthController {
   @UseGuards(LocalAuthGuard)
   @responseMessage('Fetch login')
   handleLogin(@Request() req) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
     return this.authService.login(req.user);
   }
 

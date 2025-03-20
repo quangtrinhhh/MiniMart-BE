@@ -1,22 +1,41 @@
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+
+// Định nghĩa interface cho JWT payload
+interface JwtPayload {
+  sub: string;
+  username: string;
+  role: string;
+}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private configService: ConfigService) {
+  constructor(private readonly configService: ConfigService) {
+    const jwtSecret = configService.get<string>('JWT_SECRET');
+
+    if (!jwtSecret) {
+      throw new Error('JWT_SECRET is not defined in configuration');
+    }
+
     super({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET'),
+      secretOrKey: jwtSecret,
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async validate(payload: any) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-    return { _id: payload.sub, username: payload.username, role: payload.role };
+  validate(payload: JwtPayload) {
+    if (!payload.sub || !payload.username || !payload.role) {
+      throw new UnauthorizedException('Invalid JWT payload');
+    }
+
+    return {
+      _id: payload.sub,
+      username: payload.username,
+      role: payload.role,
+    };
   }
 }

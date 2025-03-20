@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty } from 'class-validator';
+import { IsEmail, IsNotEmpty, Matches } from 'class-validator';
 
 export class CreateAuthDto {
   @IsNotEmpty({ message: 'first_name không được để trống ' })
@@ -14,7 +14,10 @@ export class CreateAuthDto {
   @IsNotEmpty({ message: 'password không được để trống ' })
   password: string;
 
-  @IsNotEmpty({ message: 'phone_number không được để trống ' })
+  @IsNotEmpty({ message: 'phone không được để trống' })
+  @Matches(/^(03[2-9]|05[689]|07[06789]|08[1-8]|09[0-9])\d{7}$/, {
+    message: 'Số điện thoại không hợp lệ theo các nhà mạng Việt Nam',
+  })
   phone_number: string;
 }
 

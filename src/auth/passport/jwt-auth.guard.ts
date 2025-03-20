@@ -39,6 +39,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     }
     console.log('user đã xác thực từ jwt-auth', user);
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return user; // Trả về người dùng sau khi xác thực
   }
 }
