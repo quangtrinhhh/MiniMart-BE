@@ -184,19 +184,13 @@ export class OrdersService {
 
   async getAllOrders(): Promise<Order[]> {
     return this.orderRepository.find({
-      relations: ['user', 'orderItems', 'orderItems.product'],
-      select: {
-        id: true,
-        status: true,
-        shipping_fee: true,
-        total: true,
-        created_at: true,
-        user: {
-          id: true,
-          email: true,
-          phone_number: true,
-        },
-      },
+      relations: [
+        'orderItems',
+        'orderItems.product',
+        'orderItems.product.assets',
+        'orderItems.product.assets.asset',
+      ],
+
       order: { created_at: 'DESC' }, // Sắp xếp đơn hàng mới nhất lên đầu
     });
   }
