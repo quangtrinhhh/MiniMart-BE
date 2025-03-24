@@ -2,7 +2,7 @@ import {
   OrderStatus,
   PaymentMethod,
   PaymentStatus,
-} from 'src/enums/order-status.enum';
+} from 'src/common/enums/order-status.enum';
 import { OrderItem } from 'src/modules/orderitem/entities/orderitem.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import {

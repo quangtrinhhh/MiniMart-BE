@@ -267,4 +267,9 @@ export class UsersService {
       console.log('Admin account already exists.');
     }
   }
+
+  async countUsers() {
+    const countUsers = await this.userRepository.count();
+    return countUsers;
+  }
 }

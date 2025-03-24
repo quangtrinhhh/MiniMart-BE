@@ -37,6 +37,7 @@ import { ProductVariantModule } from './modules/product-variant/product-variant.
 import { ProductVariant } from './modules/product-variant/entities/product-variant.entity';
 import { ProductCategory } from './modules/category/entities/product-category.entity';
 import { CacheModule } from '@nestjs/cache-manager';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import { CacheModule } from '@nestjs/cache-manager';
     AuthModule,
     ProductAttributeModule,
     ProductVariantModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [

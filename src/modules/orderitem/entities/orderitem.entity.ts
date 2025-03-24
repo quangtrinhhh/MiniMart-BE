@@ -1,4 +1,5 @@
 import { Order } from 'src/modules/orders/entities/order.entity';
+import { ProductVariant } from 'src/modules/product-variant/entities/product-variant.entity';
 import { Product } from 'src/modules/product/entities/product.entity';
 import {
   Entity,
@@ -19,6 +20,10 @@ export class OrderItem {
   @ManyToOne(() => Product, (product) => product.orderItems)
   @JoinColumn({ name: 'Product_id' })
   product: Product;
+
+  @ManyToOne(() => ProductVariant, { nullable: true }) // Thêm quan hệ với biến thể
+  @JoinColumn({ name: 'ProductVariant_id' })
+  variant?: ProductVariant;
 
   @ManyToOne(() => Order, (order) => order.orderItems)
   @JoinColumn({ name: 'Order_id' })
