@@ -29,4 +29,9 @@ export class CreateOrderDto {
   @IsNotEmpty()
   @IsString()
   consignee_name: string;
+
+  @IsNotEmpty()
+  @IsNumber()
+  @Type(() => Number)
+  total: number;
 }

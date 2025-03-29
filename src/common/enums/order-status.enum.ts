@@ -13,4 +13,5 @@ export enum PaymentStatus {
   PENDING = 'pending', // Đang chờ thanh toán
   PAID = 'paid', // Đã thanh toán
   FAILED = 'failed', // Thanh toán thất bại
+  EXPIRED = 'expired', // Quá hạn chưa thanh toán
 }

@@ -145,7 +145,12 @@ export class ProductService {
       skip: (current - 1) * pageSize,
       take: pageSize,
       order: orderBy,
-      relations: ['productCategories', 'attributes', 'variants'],
+      relations: [
+        'productCategories',
+        'productCategories.category',
+        'attributes',
+        'variants',
+      ],
     });
 
     return {

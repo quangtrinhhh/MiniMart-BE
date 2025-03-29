@@ -6,11 +6,13 @@ import {
   ParseIntPipe,
   Post,
   Put,
+  Req,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { GetUser } from 'src/decorator/user.decorator';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderStatus } from 'src/common/enums/order-status.enum';
+import { Request } from 'express';
 
 @Controller('orders')
 export class OrdersController {
@@ -28,8 +30,14 @@ export class OrdersController {
   async createOrder(
     @GetUser('_id') userId: number,
     @Body() createOrderDto: CreateOrderDto,
+    @Req() req: Request,
   ) {
-    return this.ordersService.createOrder(userId, createOrderDto);
+    const ip =
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0] || // Nếu dùng proxy
+      req.connection?.remoteAddress || // IPv4 (cũ)
+      req.socket?.remoteAddress || // IPv6
+      '127.0.0.1'; // Giá trị mặc định nếu không có IP
+    return this.ordersService.createOrder(userId, createOrderDto, ip);
   }
   // @Get('/getorder')
   // async getAllOrderAdmin(@GetUser('_id') userId: number) {
