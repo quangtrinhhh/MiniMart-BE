@@ -38,7 +38,8 @@ import { ProductVariant } from './modules/product-variant/entities/product-varia
 import { ProductCategory } from './modules/category/entities/product-category.entity';
 import { CacheModule } from '@nestjs/cache-manager';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
-import { PaymentModule } from './modules/payment/payment.module';
+import { VNPayModule } from './modules/vnpay/vnpay.module';
+import { CheckoutModule } from './modules/checkout/checkout.module';
 
 @Module({
   imports: [
@@ -103,7 +104,8 @@ import { PaymentModule } from './modules/payment/payment.module';
     ProductAttributeModule,
     ProductVariantModule,
     DashboardModule,
-    PaymentModule,
+    VNPayModule,
+    CheckoutModule,
   ],
   controllers: [AppController],
   providers: [

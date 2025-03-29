@@ -4,6 +4,7 @@ export enum OrderStatus {
   SHIPPED = 'shipped',
   DELIVERED = 'delivered',
   CANCELED = 'canceled',
+  CONFIRMED = 'confirmed',
 }
 export enum PaymentMethod {
   COD = 'cod', // Thanh toán khi nhận hàng

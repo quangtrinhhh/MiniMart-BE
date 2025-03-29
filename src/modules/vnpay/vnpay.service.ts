@@ -1,8 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { vnpayConfig } from 'src/config/vnpay.config';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import moment from 'moment';
+import { CheckoutService } from '../checkout/checkout.service';
+import { PaymentStatus } from 'src/common/enums/order-status.enum';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Order } from '../orders/entities/order.entity';
+import { Repository } from 'typeorm';
 
 interface CallbackResult {
   status: 'success' | 'failed' | 'invalid';
@@ -11,13 +16,20 @@ interface CallbackResult {
 }
 
 @Injectable()
-export class PaymentService {
+export class VNPayService {
+  constructor(
+    @Inject(forwardRef(() => CheckoutService))
+    private readonly checkoutService: CheckoutService,
+    @InjectRepository(Order)
+    private readonly orderRepository: Repository<Order>,
+  ) {}
   // Tạo URL thanh toán
   async createPaymentUrl(
     createPaymentDto: CreatePaymentDto,
     clientIp: string,
   ): Promise<string> {
     const { orderInfo, amount, orderId } = createPaymentDto;
+    console.log('createPaymentUrl check IP: ', clientIp);
 
     const vnp_Params: Record<string, string | number> = {};
     const orderType = 'other'; // Loại đơn hàng
@@ -34,7 +46,8 @@ export class PaymentService {
     vnp_Params['vnp_OrderType'] = orderType;
     vnp_Params['vnp_Amount'] = (amount * 100).toString();
     vnp_Params['vnp_TxnRef'] = orderId; // Mã giao dịch độc nhất
-    vnp_Params['vnp_ReturnUrl'] = 'https://ega-mini-mart.mysapo.net/checkout';
+    vnp_Params['vnp_ReturnUrl'] =
+      'http://localhost:8080/api/v1/vnpay/vnpay-return';
     vnp_Params['vnp_IpAddr'] = clientIp; // Hoặc lấy từ request của người dùng
     vnp_Params['vnp_CreateDate'] = createDate;
 
@@ -52,7 +65,9 @@ export class PaymentService {
   }
 
   // Xử lý callback từ VNPAY
-  handleCallback(queryParams: Record<string, string>): Promise<CallbackResult> {
+  async handleCallback(
+    queryParams: Record<string, string>,
+  ): Promise<CallbackResult> {
     try {
       const secureHash = queryParams['vnp_SecureHash'];
       delete queryParams['vnp_SecureHash']; // Loại bỏ để tạo chữ ký mới
@@ -73,6 +88,21 @@ export class PaymentService {
 
       if (transactionStatus === '00') {
         console.log('✅ Payment successful for order:', orderId);
+        // 🛠 Cập nhật trạng thái đơn hàng thông qua CheckoutService
+
+        const order = await this.orderRepository.findOne({
+          where: { id: Number(orderId) },
+          relations: ['user'],
+        });
+        await this.checkoutService.updateOrderStatus(
+          orderId,
+          PaymentStatus.PAID,
+        );
+        await this.checkoutService.confirmVnpayPayment(
+          Number(orderId),
+          transactionStatus,
+          Number(order?.user.id),
+        );
         return Promise.resolve({ status: 'success', orderId });
       } else {
         console.warn('⚠️ Payment failed for order:', orderId);
@@ -106,11 +136,6 @@ export class PaymentService {
       .createHmac('sha512', secretKey)
       .update(queryString)
       .digest('hex');
-
-    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
-    console.log('Query String for Hash:', queryString);
-    console.log('Generated Secure Hash:', generatedSecureHash);
-
     return generatedSecureHash;
   }
 }

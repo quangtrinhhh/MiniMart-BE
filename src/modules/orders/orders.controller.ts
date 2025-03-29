@@ -4,15 +4,15 @@ import {
   Get,
   Param,
   ParseIntPipe,
-  Post,
+  // Post,
   Put,
-  Req,
+  // Req,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { GetUser } from 'src/decorator/user.decorator';
-import { CreateOrderDto } from './dto/create-order.dto';
+// import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderStatus } from 'src/common/enums/order-status.enum';
-import { Request } from 'express';
+// import { Request } from 'express';
 
 @Controller('orders')
 export class OrdersController {
@@ -26,19 +26,22 @@ export class OrdersController {
     await this.ordersService.updateOrderStatus(userId, orderId, newStatus);
     return { message: 'Order status updated successfully' };
   }
-  @Post()
-  async createOrder(
-    @GetUser('_id') userId: number,
-    @Body() createOrderDto: CreateOrderDto,
-    @Req() req: Request,
-  ) {
-    const ip =
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0] || // Nếu dùng proxy
-      req.connection?.remoteAddress || // IPv4 (cũ)
-      req.socket?.remoteAddress || // IPv6
-      '127.0.0.1'; // Giá trị mặc định nếu không có IP
-    return this.ordersService.createOrder(userId, createOrderDto, ip);
-  }
+  // @Post()
+  // async createOrder(
+  //   @GetUser('_id') userId: number,
+  //   @Body() createOrderDto: CreateOrderDto,
+  //   @Req() req: Request,
+  // ) {
+  //   const ipAddr = (
+  //     req.headers['x-forwarded-for']?.toString() ||
+  //     req.ip ||
+  //     req.connection?.remoteAddress ||
+  //     '127.0.0.1'
+  //   )
+  //     .split(',')[0]
+  //     .trim();
+  //   return this.ordersService.createOrder(userId, createOrderDto, ipAddr);
+  // }
   // @Get('/getorder')
   // async getAllOrderAdmin(@GetUser('_id') userId: number) {
   //   return this.ordersService.getAllOrderAdmin(userId);

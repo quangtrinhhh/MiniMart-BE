@@ -1,11 +1,12 @@
 import { Controller, Get, Post, Body, Query, Req } from '@nestjs/common';
-import { PaymentService } from './payment.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { Request } from 'express';
+import { Public } from 'src/decorator/customize';
+import { VNPayService } from './vnpay.service';
 
-@Controller('payment')
-export class PaymentController {
-  constructor(private readonly paymentService: PaymentService) {}
+@Controller('vnpay')
+export class VNPayController {
+  constructor(private readonly vnpayService: VNPayService) {}
 
   // API tạo yêu cầu thanh toán
   @Post('create')
@@ -23,7 +24,7 @@ export class PaymentController {
         .split(',')[0]
         .trim();
 
-      const paymentUrl: string = await this.paymentService.createPaymentUrl(
+      const paymentUrl: string = await this.vnpayService.createPaymentUrl(
         createPaymentDto,
         ipAddr,
       );
@@ -38,10 +39,11 @@ export class PaymentController {
   }
 
   // API nhận kết quả callback từ VNPAY
+  @Public()
   @Get('vnpay-return')
   async handleVnpayReturn(@Query() queryParams: Record<string, string>) {
     try {
-      const result = await this.paymentService.handleCallback(queryParams);
+      const result = await this.vnpayService.handleCallback(queryParams);
 
       // Xử lý kết quả callback từ VNPAY
       if (result.status === 'success') {
