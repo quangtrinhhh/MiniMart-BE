@@ -45,28 +45,31 @@ export class CheckoutService {
   ) {
     return this.entityManager.transaction(
       async (transactionalEntityManager) => {
-        const existingOrder = await this.orderRepository.findOne({
-          where: { user: { id: userId }, status: OrderStatus.PENDING },
-        });
-        if (existingOrder) {
-          throw new BadRequestException(
-            'Bạn đã có đơn hàng đang chờ xử lý. Vui lòng hoàn tất hoặc hủy đơn hàng trước khi đặt đơn hàng mới.',
-          );
-        }
+        // const existingOrder = await this.orderRepository.findOne({
+        //   where: {
+        //     user: { id: userId },
+        //     payment_status: PaymentStatus.PROCESSING,
+        //   },
+        // });
+        // if (existingOrder) {
+        //   throw new BadRequestException(
+        //     'Bạn đã có đơn hàng đang chờ xử lý. Vui lòng hoàn tất hoặc hủy đơn hàng trước khi đặt đơn hàng mới.',
+        //   );
+        // }
 
         const cart = await this.cartRepository.findOne({
           where: { user: { id: userId } },
           relations: ['cartItems', 'cartItems.product'],
         });
         if (!cart || cart.cartItems.length === 0) {
-          throw new BadRequestException('Cart is empty');
+          throw new BadRequestException('Giỏ hàng trống');
         }
 
         const order = this.orderRepository.create({
           user: { id: userId },
-          status: OrderStatus.PENDING,
+          status: OrderStatus.PROCESSING,
           payment_method: checkoutDto.payment_method,
-          payment_status: PaymentStatus.PENDING,
+          payment_status: PaymentStatus.PROCESSING,
           shipping_address: checkoutDto.shipping_address,
           shipping_fee: checkoutDto.shipping_fee,
           consignee_name: checkoutDto.consignee_name,
@@ -81,7 +84,9 @@ export class CheckoutService {
 
         for (const item of cart.cartItems) {
           if (!item.product) {
-            throw new Error(`Invalid cart item: product is missing`);
+            throw new BadRequestException(
+              `Mặt hàng trong giỏ hàng không hợp lệ: sản phẩm bị thiếu`,
+            );
           }
 
           const product = await transactionalEntityManager.findOne(Product, {
@@ -132,7 +137,7 @@ export class CheckoutService {
           );
         }
 
-        return { message: 'Order placed successfully', order: savedOrder };
+        return { order: savedOrder };
       },
     );
   }

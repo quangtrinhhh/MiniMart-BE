@@ -1,13 +1,25 @@
-import { Controller, Get, Post, Body, Query, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  Req,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { Request } from 'express';
-import { Public } from 'src/decorator/customize';
+import { Public, responseMessage } from 'src/decorator/customize';
 import { VNPayService } from './vnpay.service';
+import { OrdersService } from '../orders/orders.service';
 
 @Controller('vnpay')
 export class VNPayController {
-  constructor(private readonly vnpayService: VNPayService) {}
-
+  constructor(
+    private readonly vnpayService: VNPayService,
+    private readonly ordersService: OrdersService,
+  ) {}
   // API tạo yêu cầu thanh toán
   @Post('create')
   async createPayment(
@@ -40,36 +52,48 @@ export class VNPayController {
 
   // API nhận kết quả callback từ VNPAY
   @Public()
+  @responseMessage('Xử lý kết quả thanh toán VNPAY')
   @Get('vnpay-return')
   async handleVnpayReturn(@Query() queryParams: Record<string, string>) {
+    console.log('🔍 Query Params từ FE gửi đến BE:', queryParams); // Debug
     try {
       const result = await this.vnpayService.handleCallback(queryParams);
 
-      // Xử lý kết quả callback từ VNPAY
       if (result.status === 'success') {
+        const order = await this.ordersService.getOrderById(
+          Number(result.orderId),
+        );
+
         return {
           status: 'success',
           message: 'Thanh toán thành công',
-          orderId: result.orderId,
+          order,
         };
-      } else if (result.status === 'failed') {
+      }
+
+      if (result.status === 'failed') {
         return {
           status: 'failed',
           message: 'Thanh toán thất bại',
           orderId: result.orderId,
         };
-      } else {
-        return {
-          status: 'invalid',
-          message: result.message || 'Chữ ký không hợp lệ',
-        };
       }
-    } catch (error: unknown) {
+
       return {
-        status: 'error',
-        message: 'Lỗi khi xử lý callback từ VNPAY',
-        error: error instanceof Error ? error.message : 'Unknown error',
+        status: 'invalid',
+        message: result.message || 'Chữ ký không hợp lệ',
       };
+    } catch (error) {
+      console.error('❌ Lỗi khi xử lý callback VNPAY:', error);
+
+      throw new HttpException(
+        {
+          status: 'error',
+          message: 'Lỗi trong quá trình xử lý callback từ VNPAY',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 }

@@ -381,8 +381,41 @@ export class OrdersService {
     return result;
   }
 
-  getOrderById(orderId: number): Promise<Order | null> {
-    return this.orderRepository.findOne({ where: { id: orderId } });
+  async getOrderById(orderId: number): Promise<Order | null> {
+    try {
+      const order = await this.orderRepository.findOne({
+        where: { id: orderId },
+        relations: ['user'], // Load thông tin user
+        select: {
+          id: true,
+          status: true,
+          shipping_fee: true,
+          shipping_address: true,
+          payment_method: true,
+          payment_status: true,
+          note: true,
+          consignee_name: true,
+          total: true,
+          created_at: true,
+          canceled_at: true,
+          completed_at: true,
+          delivery_at: true,
+          user: {
+            id: true, // Chỉ lấy user.id
+          },
+        },
+      });
+
+      if (!order) {
+        console.error(`❌ Order not found: ${orderId}`);
+        return null;
+      }
+
+      return order;
+    } catch (error: unknown) {
+      console.error('❌ Error in getOrderById:', error);
+      return null;
+    }
   }
 
   async updateOrderPaymentStatus(orderId: number, status: PaymentStatus) {

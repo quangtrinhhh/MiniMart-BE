@@ -46,8 +46,7 @@ export class VNPayService {
     vnp_Params['vnp_OrderType'] = orderType;
     vnp_Params['vnp_Amount'] = (amount * 100).toString();
     vnp_Params['vnp_TxnRef'] = orderId; // Mã giao dịch độc nhất
-    vnp_Params['vnp_ReturnUrl'] =
-      'http://localhost:8080/api/v1/vnpay/vnpay-return';
+    vnp_Params['vnp_ReturnUrl'] = 'http://localhost:3000/checkout/payment';
     vnp_Params['vnp_IpAddr'] = clientIp; // Hoặc lấy từ request của người dùng
     vnp_Params['vnp_CreateDate'] = createDate;
 
@@ -70,30 +69,41 @@ export class VNPayService {
   ): Promise<CallbackResult> {
     try {
       const secureHash = queryParams['vnp_SecureHash'];
-      delete queryParams['vnp_SecureHash']; // Loại bỏ để tạo chữ ký mới
+      delete queryParams['vnp_SecureHash']; // ❗️Loại bỏ để kiểm tra chữ ký
 
       const generatedSecureHash = this.generateSignature(queryParams);
 
       if (secureHash !== generatedSecureHash) {
-        console.error('❌ Signature mismatch:', {
+        console.error('❌ [VNPay] Signature mismatch:', {
           secureHash,
           generatedSecureHash,
         });
-        throw new Error('Invalid signature');
+        return { status: 'invalid', message: 'Chữ ký không hợp lệ' };
       }
 
-      // Kiểm tra trạng thái giao dịch
+      // 📌 Kiểm tra trạng thái giao dịch
       const orderId = queryParams['vnp_TxnRef'];
       const transactionStatus = queryParams['vnp_TransactionStatus'];
 
-      if (transactionStatus === '00') {
-        console.log('✅ Payment successful for order:', orderId);
-        // 🛠 Cập nhật trạng thái đơn hàng thông qua CheckoutService
+      if (!orderId) {
+        console.error('⚠️ [VNPay] Thiếu orderId trong callback:', queryParams);
+        return { status: 'invalid', message: 'Thiếu orderId' };
+      }
 
-        const order = await this.orderRepository.findOne({
-          where: { id: Number(orderId) },
-          relations: ['user'],
-        });
+      // 🔍 Tìm đơn hàng trong database
+      const order = await this.orderRepository.findOne({
+        where: { id: Number(orderId) },
+        relations: ['user'],
+      });
+
+      if (!order) {
+        console.error('❌ [VNPay] Không tìm thấy đơn hàng:', orderId);
+        return { status: 'invalid', message: 'Đơn hàng không tồn tại' };
+      }
+
+      if (transactionStatus === '00') {
+        console.log('✅ [VNPay] Thanh toán thành công:', orderId);
+
         await this.checkoutService.updateOrderStatus(
           orderId,
           PaymentStatus.PAID,
@@ -101,18 +111,20 @@ export class VNPayService {
         await this.checkoutService.confirmVnpayPayment(
           Number(orderId),
           transactionStatus,
-          Number(order?.user.id),
+          Number(order.user.id),
         );
-        return Promise.resolve({ status: 'success', orderId });
+
+        return { status: 'success', orderId };
       } else {
-        console.warn('⚠️ Payment failed for order:', orderId);
-        return Promise.resolve({ status: 'failed', orderId });
+        console.warn('⚠️ [VNPay] Thanh toán thất bại:', orderId);
+        return { status: 'failed', orderId };
       }
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      console.error('❌ Error in handleCallback:', errorMessage);
-      return Promise.resolve({ status: 'invalid', message: errorMessage });
+    } catch (error) {
+      console.error('❌ [VNPay] Lỗi xử lý callback:', error);
+      return {
+        status: 'invalid',
+        message: error instanceof Error ? error.message : 'Lỗi không xác định',
+      };
     }
   }
 
