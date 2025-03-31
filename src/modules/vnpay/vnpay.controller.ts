@@ -63,7 +63,8 @@ export class VNPayController {
         const order = await this.ordersService.getOrderById(
           Number(result.orderId),
         );
-
+        console.log('Check order >>>>>>>>>>>>>>>>>>');
+        console.log(order?.orderItems);
         return {
           status: 'success',
           message: 'Thanh toán thành công',

@@ -9,12 +9,14 @@ import { CartItem } from '../cartitem/entities/cartitem.entity';
 import { OrderItem } from '../orderitem/entities/orderitem.entity';
 import { OrdersModule } from '../orders/orders.module';
 import { VNPayModule } from '../vnpay/vnpay.module';
+import { CartModule } from '../cart/cart.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Product, Order, Cart, CartItem, OrderItem]),
     OrdersModule,
     forwardRef(() => VNPayModule),
+    CartModule,
   ],
   providers: [CheckoutService],
   controllers: [CheckoutController],

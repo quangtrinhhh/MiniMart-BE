@@ -385,7 +385,7 @@ export class OrdersService {
     try {
       const order = await this.orderRepository.findOne({
         where: { id: orderId },
-        relations: ['user'], // Load thông tin user
+        relations: ['user', 'orderItems', 'orderItems.variant'], // Load thông tin user
         select: {
           id: true,
           status: true,
@@ -402,6 +402,17 @@ export class OrdersService {
           delivery_at: true,
           user: {
             id: true, // Chỉ lấy user.id
+          },
+          orderItems: {
+            id: true,
+            name: true,
+            quantity: true,
+            price: true,
+            image: true,
+            variant: {
+              id: true,
+              name: true,
+            },
           },
         },
       });

@@ -18,24 +18,29 @@ import {
   PaymentStatus,
 } from 'src/common/enums/order-status.enum';
 import { CreateCheckoutDto } from './dto/create-checkout.dto';
+import { CartService } from '../cart/cart.service';
 
 @Injectable()
 export class CheckoutService {
   constructor(
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
-    @InjectRepository(Cart)
-    private readonly cartRepository: Repository<Cart>,
+
     @InjectRepository(CartItem)
     private readonly cartItemRepository: Repository<CartItem>,
+
     @InjectRepository(OrderItem)
     private readonly orderItemRepository: Repository<OrderItem>,
+
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
+
     private readonly entityManager: EntityManager,
 
     @Inject(forwardRef(() => VNPayService))
     private readonly vnpayService: VNPayService,
+
+    private readonly cartService: CartService,
   ) {}
 
   async checkout(
@@ -57,13 +62,19 @@ export class CheckoutService {
         //   );
         // }
 
-        const cart = await this.cartRepository.findOne({
-          where: { user: { id: userId } },
-          relations: ['cartItems', 'cartItems.product'],
-        });
+        const cart = await this.cartService.getCartByUserId(userId);
+
         if (!cart || cart.cartItems.length === 0) {
           throw new BadRequestException('Giỏ hàng trống');
         }
+
+        const calculatedTotal = cart.cartItems.reduce(
+          (acc, item) => acc + item.price * item.quantity,
+          0,
+        );
+
+        if (calculatedTotal != checkoutDto.total)
+          throw new Error('Giá không đúng với BE ');
 
         const order = this.orderRepository.create({
           user: { id: userId },
@@ -74,10 +85,7 @@ export class CheckoutService {
           shipping_fee: checkoutDto.shipping_fee,
           consignee_name: checkoutDto.consignee_name,
           note: checkoutDto.note,
-          total: cart.cartItems.reduce(
-            (acc, item) => acc + item.price * item.quantity,
-            0,
-          ),
+          total: calculatedTotal,
         });
 
         const savedOrder = await transactionalEntityManager.save(order);
@@ -91,6 +99,7 @@ export class CheckoutService {
 
           const product = await transactionalEntityManager.findOne(Product, {
             where: { id: item.product.id },
+            relations: ['variants'],
           });
           if (product && product.stock >= item.quantity) {
             product.stock -= item.quantity;
@@ -100,17 +109,18 @@ export class CheckoutService {
               `Not enough stock for product ${product?.name}`,
             );
           }
-          const variant =
-            item.product.variants?.find((v) => v.id === item.variant?.id) ??
-            null;
-
+          const variant = item.variant ?? null;
+          const imagePath = item.product.assets?.length
+            ? item.product.assets[0].asset?.path
+            : null;
           const orderItem = this.orderItemRepository.create({
             order: savedOrder,
             product,
             quantity: item.quantity,
             price: item.price,
             name: item.product.name,
-            ...(variant ? { variant } : {}), // Chỉ thêm nếu variant tồn tại
+            image: imagePath,
+            ...(variant ? { variant } : {}),
           });
           await transactionalEntityManager.save(orderItem);
         }
@@ -123,10 +133,6 @@ export class CheckoutService {
         }
 
         if (checkoutDto.payment_method === PaymentMethod.BANK_TRANSFER) {
-          console.log('>>>>>>>>>>>>>>>>>>>>>>');
-          console.log('savedOrder.total: ', savedOrder.total);
-          console.log('IP Address:', ipAddr);
-
           return this.vnpayService.createPaymentUrl(
             {
               orderInfo: savedOrder.id.toString(),

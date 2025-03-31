@@ -46,6 +46,10 @@ export class OrdersController {
   // async getAllOrderAdmin(@GetUser('_id') userId: number) {
   //   return this.ordersService.getAllOrderAdmin(userId);
   // }
+  @Get('/:id')
+  async onebyorder(@Param('id', ParseIntPipe) id: number) {
+    return this.ordersService.getOrderById(id);
+  }
   @Get()
   async getAllOrders(@GetUser('_id') userId: number) {
     return this.ordersService.getAllOrders(userId);

@@ -5,5 +5,6 @@ import { CartitemController } from './cartitem.controller';
 @Module({
   controllers: [CartitemController],
   providers: [CartitemService],
+  exports: [CartitemService],
 })
 export class CartitemModule {}

@@ -201,7 +201,13 @@ export class CartService {
   async getCartByUserId(userId: number): Promise<Cart> {
     const cart = await this.cartRepository.findOne({
       where: { user: { id: userId } },
-      relations: ['cartItems', 'cartItems.product', 'cartItems.variant'],
+      relations: [
+        'cartItems',
+        'cartItems.product',
+        'cartItems.variant',
+        'cartItems.product.assets',
+        'cartItems.product.assets.asset',
+      ],
     });
 
     if (!cart) {
