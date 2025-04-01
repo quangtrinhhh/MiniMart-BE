@@ -26,26 +26,6 @@ export class OrdersController {
     await this.ordersService.updateOrderStatus(userId, orderId, newStatus);
     return { message: 'Order status updated successfully' };
   }
-  // @Post()
-  // async createOrder(
-  //   @GetUser('_id') userId: number,
-  //   @Body() createOrderDto: CreateOrderDto,
-  //   @Req() req: Request,
-  // ) {
-  //   const ipAddr = (
-  //     req.headers['x-forwarded-for']?.toString() ||
-  //     req.ip ||
-  //     req.connection?.remoteAddress ||
-  //     '127.0.0.1'
-  //   )
-  //     .split(',')[0]
-  //     .trim();
-  //   return this.ordersService.createOrder(userId, createOrderDto, ipAddr);
-  // }
-  // @Get('/getorder')
-  // async getAllOrderAdmin(@GetUser('_id') userId: number) {
-  //   return this.ordersService.getAllOrderAdmin(userId);
-  // }
   @Get('/:id')
   async onebyorder(@Param('id', ParseIntPipe) id: number) {
     return this.ordersService.getOrderById(id);

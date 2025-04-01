@@ -50,20 +50,8 @@ export class CheckoutService {
   ) {
     return this.entityManager.transaction(
       async (transactionalEntityManager) => {
-        // const existingOrder = await this.orderRepository.findOne({
-        //   where: {
-        //     user: { id: userId },
-        //     payment_status: PaymentStatus.PROCESSING,
-        //   },
-        // });
-        // if (existingOrder) {
-        //   throw new BadRequestException(
-        //     'Bạn đã có đơn hàng đang chờ xử lý. Vui lòng hoàn tất hoặc hủy đơn hàng trước khi đặt đơn hàng mới.',
-        //   );
-        // }
-
+        // Kiểm tra giỏ hàng
         const cart = await this.cartService.getCartByUserId(userId);
-
         if (!cart || cart.cartItems.length === 0) {
           throw new BadRequestException('Giỏ hàng trống');
         }
@@ -73,9 +61,12 @@ export class CheckoutService {
           0,
         );
 
-        if (calculatedTotal != checkoutDto.total)
-          throw new Error('Giá không đúng với BE ');
+        // Kiểm tra tổng giá trị
+        if (calculatedTotal !== checkoutDto.total) {
+          throw new Error('Giá không đúng với BE');
+        }
 
+        // Tạo đơn hàng mới
         const order = this.orderRepository.create({
           user: { id: userId },
           status: OrderStatus.PROCESSING,
@@ -90,6 +81,7 @@ export class CheckoutService {
 
         const savedOrder = await transactionalEntityManager.save(order);
 
+        // Xử lý từng sản phẩm trong giỏ hàng
         for (const item of cart.cartItems) {
           if (!item.product) {
             throw new BadRequestException(
@@ -101,18 +93,38 @@ export class CheckoutService {
             where: { id: item.product.id },
             relations: ['variants'],
           });
-          if (product && product.stock >= item.quantity) {
-            product.stock -= item.quantity;
-            await transactionalEntityManager.save(product);
-          } else {
+
+          if (!product) {
             throw new BadRequestException(
-              `Not enough stock for product ${product?.name}`,
+              `Không tìm thấy sản phẩm: ${item.product.name}`,
             );
           }
-          const variant = item.variant ?? null;
-          const imagePath = item.product.assets?.length
-            ? item.product.assets[0].asset?.path
+
+          // Kiểm tra số lượng tồn kho của sản phẩm hoặc biến thể
+          const productVariant = item.variant
+            ? product.variants.find((v) => v.id === item.variant?.id)
             : null;
+
+          if (
+            (productVariant && productVariant.stock < item.quantity) ||
+            (productVariant === null && product.stock < item.quantity)
+          ) {
+            throw new BadRequestException(
+              `Không đủ số lượng cho sản phẩm ${product.name}`,
+            );
+          }
+
+          // Cập nhật tồn kho
+          if (productVariant) {
+            productVariant.stock -= item.quantity;
+            await transactionalEntityManager.save(productVariant);
+          } else {
+            product.stock -= item.quantity;
+            await transactionalEntityManager.save(product);
+          }
+
+          // Lưu thông tin đơn hàng
+          const imagePath = item.product.assets?.[0]?.asset?.path || null;
           const orderItem = this.orderItemRepository.create({
             order: savedOrder,
             product,
@@ -120,11 +132,12 @@ export class CheckoutService {
             price: item.price,
             name: item.product.name,
             image: imagePath,
-            ...(variant ? { variant } : {}),
+            variant: item.variant ?? undefined,
           });
           await transactionalEntityManager.save(orderItem);
         }
 
+        // Xóa giỏ hàng nếu thanh toán COD
         if (checkoutDto.payment_method === PaymentMethod.COD) {
           await transactionalEntityManager.delete(CartItem, {
             cart: { id: cart.id },
@@ -132,6 +145,7 @@ export class CheckoutService {
           await transactionalEntityManager.delete(Cart, { id: cart.id });
         }
 
+        // Xử lý thanh toán qua ngân hàng (VNPAY hoặc các cổng khác)
         if (checkoutDto.payment_method === PaymentMethod.BANK_TRANSFER) {
           return this.vnpayService.createPaymentUrl(
             {

@@ -28,5 +28,6 @@ import { ImageUploadService } from 'src/services/image-upload.service';
 
   controllers: [ProductController],
   providers: [ProductService, AssetsService, ImageUploadService],
+  exports: [ProductService],
 })
 export class ProductModule {}

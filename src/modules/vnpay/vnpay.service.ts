@@ -8,6 +8,7 @@ import { PaymentStatus } from 'src/common/enums/order-status.enum';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Order } from '../orders/entities/order.entity';
 import { Repository } from 'typeorm';
+import { OrdersService } from '../orders/orders.service';
 
 interface CallbackResult {
   status: 'success' | 'failed' | 'invalid';
@@ -22,6 +23,7 @@ export class VNPayService {
     private readonly checkoutService: CheckoutService,
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
+    private readonly ordersService: OrdersService,
   ) {}
   // Tạo URL thanh toán
   async createPaymentUrl(
@@ -91,10 +93,7 @@ export class VNPayService {
       }
 
       // 🔍 Tìm đơn hàng trong database
-      const order = await this.orderRepository.findOne({
-        where: { id: Number(orderId) },
-        relations: ['user'],
-      });
+      const order = await this.ordersService.getOrderById(Number(orderId));
 
       if (!order) {
         console.error('❌ [VNPay] Không tìm thấy đơn hàng:', orderId);
@@ -117,6 +116,7 @@ export class VNPayService {
         return { status: 'success', orderId };
       } else {
         console.warn('⚠️ [VNPay] Thanh toán thất bại:', orderId);
+        await this.ordersService.deleteOrder(Number(orderId));
         return { status: 'failed', orderId };
       }
     } catch (error) {

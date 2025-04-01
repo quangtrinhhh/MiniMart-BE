@@ -9,12 +9,14 @@ import { CartModule } from '../cart/cart.module';
 import { Product } from '../product/entities/product.entity';
 import { User } from '../users/entities/user.entity';
 import { ProductVariant } from '../product-variant/entities/product-variant.entity';
+import { ProductModule } from '../product/product.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Order, OrderItem, Product, User, ProductVariant]),
     UsersModule,
     CartModule,
+    ProductModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

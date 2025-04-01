@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from './entities/product.entity';
 import { Asset } from '../assets/entities/asset.entity';
 import { ProductAsset } from '../productasset/entities/productasset.entity';
-import { DataSource, In, MoreThan, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, MoreThan, Repository } from 'typeorm';
 import { Category } from '../category/entities/category.entity';
 import slugify from 'slugify';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -27,6 +27,8 @@ export class ProductService {
     private categoryRepository: Repository<Category>,
     @InjectRepository(ProductAsset)
     private productAssetRepository: Repository<ProductAsset>,
+    @InjectRepository(ProductVariant)
+    private productVariantRepository: Repository<ProductVariant>,
     @InjectRepository(ProductCategory)
     private productCategoryRepository: Repository<ProductCategory>,
 
@@ -442,6 +444,43 @@ export class ProductService {
       .getMany();
 
     return { result: products };
+  }
+
+  // Cập nhật tồn kho của sản phẩm
+  async updateProductStock(productId: number, quantity: number): Promise<void> {
+    await this.dataSource.transaction(async (manager: EntityManager) => {
+      const product = await manager.findOne(Product, {
+        where: { id: productId },
+        relations: ['variants'],
+      });
+
+      if (!product) {
+        throw new Error(`Product with ID ${productId} not found.`);
+      }
+
+      // Kiểm tra nếu số lượng kho của sản phẩm chính đủ để giảm
+      if (product.stock + quantity < 0) {
+        throw new Error(`Insufficient stock for product ${productId}`);
+      }
+
+      // Cập nhật kho của sản phẩm chính
+      product.sold -= quantity;
+      product.stock += quantity;
+      await manager.save(product);
+
+      // Cập nhật kho của các biến thể (nếu có)
+      if (product.variants.length > 0) {
+        for (const variant of product.variants) {
+          if (variant.stock + quantity < 0) {
+            throw new Error(`Insufficient stock for variant ${variant.id}`);
+          }
+
+          // Cập nhật kho của biến thể
+          variant.stock += quantity;
+          await manager.save(variant);
+        }
+      }
+    });
   }
 
   /**

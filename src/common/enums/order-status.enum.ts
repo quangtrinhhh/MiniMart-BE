@@ -16,4 +16,5 @@ export enum PaymentStatus {
   FAILED = 'failed', // Thanh toán thất bại
   EXPIRED = 'expired', // Quá hạn chưa thanh toán
   PROCESSING = 'processing', // đang xử lý
+  CANCELED = 'canceled',
 }
