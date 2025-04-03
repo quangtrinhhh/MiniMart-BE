@@ -11,12 +11,15 @@ import { FindOptionsWhere, ILike, IsNull, Repository } from 'typeorm';
 import slugify from 'slugify';
 import aqp from 'api-query-params';
 import { ImageUploadService } from 'src/services/image-upload.service';
+import { ProductCategory } from './entities/product-category.entity';
 
 @Injectable()
 export class CategoryService {
   constructor(
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>,
+    @InjectRepository(ProductCategory)
+    private productCategoryRepository: Repository<ProductCategory>,
     private readonly imageUploadService: ImageUploadService,
   ) {}
 
@@ -112,6 +115,19 @@ export class CategoryService {
     });
     if (!category)
       throw new BadRequestException(`Không tìm thấy category có id là : ${id}`);
+    return category;
+  }
+
+  async findOneSlug(slug: string) {
+    const category = await this.categoryRepository.findOne({
+      where: { slug: slug },
+      relations: ['children'],
+    });
+
+    if (!category)
+      throw new BadRequestException(
+        `Không tìm thấy category có id là : ${slug}`,
+      );
     return category;
   }
 

@@ -5,9 +5,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Category } from './entities/category.entity';
 import { AuthModule } from 'src/auth/auth.module';
 import { ImageUploadService } from 'src/services/image-upload.service';
+import { ProductCategory } from './entities/product-category.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Category]), AuthModule],
+  imports: [TypeOrmModule.forFeature([Category, ProductCategory]), AuthModule],
   controllers: [CategoryController],
   providers: [CategoryService, ImageUploadService],
   exports: [CategoryService],

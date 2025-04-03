@@ -12,6 +12,7 @@ import { ProductAttribute } from '../product-attribute/entities/product-attribut
 import { ProductVariant } from '../product-variant/entities/product-variant.entity';
 import { ProductCategory } from '../category/entities/product-category.entity';
 import { ImageUploadService } from 'src/services/image-upload.service';
+import { CategoryModule } from '../category/category.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { ImageUploadService } from 'src/services/image-upload.service';
       ProductVariant,
       ProductCategory,
     ]),
+    CategoryModule,
   ],
 
   controllers: [ProductController],

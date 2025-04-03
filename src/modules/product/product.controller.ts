@@ -36,6 +36,22 @@ export class ProductController {
   async getRelatedProducts(@Param('id') productId: number) {
     return await this.productService.getRelatedProducts(productId);
   }
+
+  @Public()
+  @Get('category/:slug')
+  async getProductBySlugCategory(
+    @Param('slug') slug: string,
+    @Query('filter') filter: string, // Lọc theo query (ví dụ: filter={"price": ">100"})
+    @Query('current') current: number = 1, // Số trang hiện tại
+    @Query('pageSize') pageSize: number = 10, // Kích thước trang
+  ) {
+    return await this.productService.getProductBySlugCategory(
+      slug,
+      filter,
+      current,
+      pageSize,
+    );
+  }
   /******************************************************************* */
   @UseInterceptors(FilesInterceptor('images', 5))
   @Post()

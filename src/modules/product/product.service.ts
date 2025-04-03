@@ -17,6 +17,7 @@ import { AssetsService } from '../assets/assets.service';
 import { ProductVariant } from '../product-variant/entities/product-variant.entity';
 import { ProductCategory } from '../category/entities/product-category.entity';
 import { ImageUploadService } from 'src/services/image-upload.service';
+import { CategoryService } from '../category/category.service';
 
 @Injectable()
 export class ProductService {
@@ -33,6 +34,7 @@ export class ProductService {
     private productCategoryRepository: Repository<ProductCategory>,
 
     private readonly assetsService: AssetsService,
+    private readonly categoryService: CategoryService,
     private readonly imageUploadService: ImageUploadService,
     private dataSource: DataSource,
   ) {}
@@ -481,6 +483,58 @@ export class ProductService {
         }
       }
     });
+  }
+  //
+  async getProductBySlugCategory(
+    slug: string,
+    query: string,
+    current = 1,
+    pageSize = 10,
+  ) {
+    // Phân tích query để lấy filter và sort từ aqp (Active Query Parser)
+    const { filter, sort } = aqp(query);
+
+    // Xoá các trường không cần thiết trong filter
+    delete filter.pageSize;
+    delete filter.current;
+
+    // Thiết lập giá trị mặc định cho sort (nếu không có)
+    const orderBy = sort || { id: 'DESC' };
+
+    // Tìm kiếm category theo slug
+    const category = await this.categoryService.findOneSlug(slug);
+    if (!category) {
+      throw new BadRequestException('Không tìm thấy danh mục nào.');
+    }
+
+    // Tính toán offset và limit cho phân trang
+    const offset = (current - 1) * pageSize;
+    const limit = pageSize;
+
+    // Lấy tổng số sản phẩm thuộc category
+    const [productCategories, totalItems] =
+      await this.productCategoryRepository.findAndCount({
+        where: { category: { id: category.id } },
+        relations: ['product', 'product.assets', 'product.assets.asset'], // Liên kết với product và asset của sản phẩm
+        skip: offset, // Sử dụng offset cho phân trang
+        take: limit, // Giới hạn số lượng sản phẩm
+        order: orderBy, // Sắp xếp theo trường đã cung cấp
+      });
+
+    // Lấy danh sách các sản phẩm từ mối quan hệ với ProductCategory
+    const products = productCategories.map(
+      (productCategory) => productCategory.product,
+    );
+
+    // Tính toán số trang
+    const totalPages = Math.ceil(totalItems / pageSize);
+
+    return {
+      category: category.name,
+      products,
+      totalItems,
+      totalPages,
+    };
   }
 
   /**

@@ -69,7 +69,7 @@ export class CheckoutService {
         // Tạo đơn hàng mới
         const order = this.orderRepository.create({
           user: { id: userId },
-          status: OrderStatus.PROCESSING,
+          status: OrderStatus.PENDING,
           payment_method: checkoutDto.payment_method,
           payment_status: PaymentStatus.PROCESSING,
           shipping_address: checkoutDto.shipping_address,

@@ -50,8 +50,10 @@ export class OrdersService {
   async cancelOrder(userId: number, orderId: number): Promise<Order> {
     return await this.dataSource.transaction(async (manager) => {
       // Lấy đơn hàng và khóa bảng Order
+      console.log(orderId, userId);
+
       const order = await manager.findOne(Order, {
-        where: { id: orderId }, // Xác thực userId trùng với id người dùng
+        where: { id: orderId, user: { id: userId } },
         relations: ['orderItems', 'orderItems.product'],
         lock: { mode: 'pessimistic_write', tables: ['order'] }, // Chỉ khóa bảng Order
       });
@@ -303,12 +305,12 @@ export class OrdersService {
     newStatus: OrderStatus,
   ): boolean {
     const validTransitions: Record<OrderStatus, OrderStatus[]> = {
-      [OrderStatus.PENDING]: [OrderStatus.PROCESSING, OrderStatus.CANCELED],
+      [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELED],
+      [OrderStatus.CONFIRMED]: [OrderStatus.PROCESSING],
       [OrderStatus.PROCESSING]: [OrderStatus.SHIPPED, OrderStatus.CANCELED],
       [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED],
       [OrderStatus.DELIVERED]: [],
       [OrderStatus.CANCELED]: [],
-      [OrderStatus.CONFIRMED]: [OrderStatus.SHIPPED],
     };
 
     return validTransitions[currentStatus]?.includes(newStatus) ?? false;
