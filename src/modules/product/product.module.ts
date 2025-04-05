@@ -13,6 +13,7 @@ import { ProductVariant } from '../product-variant/entities/product-variant.enti
 import { ProductCategory } from '../category/entities/product-category.entity';
 import { ImageUploadService } from 'src/services/image-upload.service';
 import { CategoryModule } from '../category/category.module';
+import { RedisModule } from '../redis/redis.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { CategoryModule } from '../category/category.module';
       ProductCategory,
     ]),
     CategoryModule,
+    RedisModule,
   ],
 
   controllers: [ProductController],

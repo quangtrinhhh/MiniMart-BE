@@ -40,6 +40,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { VNPayModule } from './modules/vnpay/vnpay.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
+import { RedisModule } from './modules/redis/redis.module';
 
 @Module({
   imports: [
@@ -106,6 +107,7 @@ import { CheckoutModule } from './modules/checkout/checkout.module';
     DashboardModule,
     VNPayModule,
     CheckoutModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [

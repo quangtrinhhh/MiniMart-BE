@@ -1,7 +1,7 @@
 import {
-  BadGatewayException,
   BadRequestException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -18,6 +18,7 @@ import { ProductVariant } from '../product-variant/entities/product-variant.enti
 import { ProductCategory } from '../category/entities/product-category.entity';
 import { ImageUploadService } from 'src/services/image-upload.service';
 import { CategoryService } from '../category/category.service';
+import { RedisService } from '../redis/redis.service';
 
 @Injectable()
 export class ProductService {
@@ -36,6 +37,8 @@ export class ProductService {
     private readonly assetsService: AssetsService,
     private readonly categoryService: CategoryService,
     private readonly imageUploadService: ImageUploadService,
+
+    private readonly redisService: RedisService,
     private dataSource: DataSource,
   ) {}
 
@@ -143,7 +146,16 @@ export class ProductService {
     delete filter.current;
 
     const orderBy = sort || { created_at: 'DESC' };
+    // Tạo key cache duy nhất cho truy vấn này
+    const cacheKey = `products:${JSON.stringify(filter)}:${JSON.stringify(orderBy)}:${current}:${pageSize}`;
 
+    // Kiểm tra cache Redis trước khi truy vấn DB
+    const cachedResult = await this.redisService.get<unknown>(cacheKey);
+    if (cachedResult) {
+      console.log('✅ get all Trả về dữ liệu từ cache Redis');
+
+      return cachedResult;
+    }
     const [products, totalItems] = await this.productRepository.findAndCount({
       where: filter,
       skip: (current - 1) * pageSize,
@@ -156,17 +168,34 @@ export class ProductService {
         'variants',
       ],
     });
-
-    return {
+    // Lưu kết quả vào Redis để tái sử dụng sau
+    const result = {
       result: products,
       totalItems,
       totalPages: Math.ceil(totalItems / pageSize),
     };
+    await this.redisService.set(cacheKey, result, 3600);
+    return {
+      result,
+    };
   }
 
   async findOne(slug: string) {
+    const cacheKey = `product:${slug}`; // Tạo khóa cache theo slug
+
+    // Kiểm tra xem sản phẩm đã có trong cache chưa
+    const cachedProduct = await this.redisService.get(cacheKey);
+
+    if (cachedProduct && typeof cachedProduct === 'string') {
+      // Nếu có, trả về ngay kết quả từ cache
+      console.log('✅ Trả về dữ liệu từ cache Redis');
+
+      return { result: JSON.parse(cachedProduct) as Product };
+    }
+
+    // Nếu không có trong cache, truy vấn cơ sở dữ liệu
     const product = await this.productRepository.findOne({
-      where: { slug: slug },
+      where: { slug },
       relations: [
         'productCategories',
         'productCategories.category',
@@ -175,21 +204,21 @@ export class ProductService {
       ],
     });
 
-    if (!product) throw new BadGatewayException('Không tìm thấy product');
+    if (!product) throw new NotFoundException('Không tìm thấy sản phẩm');
 
-    // Transform the productCategories to categories
+    // Chuyển đổi productCategories thành categories
     const transformedProduct = {
       ...product,
       categories: product.productCategories.map((pc) => pc.category),
     };
 
-    // Create a new object without the productCategories field
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { productCategories, ...result } = transformedProduct;
+    // Tách productCategories ra khỏi kết quả trả về
+    const result = transformedProduct;
 
-    return {
-      result: result,
-    };
+    // Lưu vào Redis với TTL (ví dụ 1 giờ)
+    await this.redisService.set(cacheKey, JSON.stringify(result), 3600);
+
+    return { result };
   }
 
   async update(
@@ -355,6 +384,14 @@ export class ProductService {
 
       // ✅ Commit transaction
       await queryRunner.commitTransaction();
+      const cacheKey = `product:${product.slug}`; // Chỉ xóa cache của sản phẩm theo slug
+      await this.redisService.del(cacheKey);
+      // Xóa cache liên quan đến sản phẩm
+      const cacheKeyPattern = `products:*`; // Sử dụng pattern để tìm kiếm các cache liên quan đến sản phẩm
+      const cacheKeys = await this.redisService.scanKeys(cacheKeyPattern);
+      for (const key of cacheKeys) {
+        await this.redisService.del(key);
+      }
 
       return { message: `Xóa thành công sản phẩm: ${product.name}` };
     } catch (error) {
