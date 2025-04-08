@@ -24,6 +24,10 @@ export class UpdateProductVariantDto {
   @IsOptional()
   price?: number;
 
+  @IsString()
+  @IsOptional()
+  sku?: string;
+
   @IsNumber()
   @IsOptional()
   old_price?: number;
@@ -31,6 +35,9 @@ export class UpdateProductVariantDto {
   @IsNumber()
   @IsOptional()
   stock?: number;
+
+  @IsOptional()
+  created_at?: Date;
 }
 
 export class UpdateProductDto {
@@ -44,6 +51,7 @@ export class UpdateProductDto {
   @IsOptional()
   slug?: string; // ✅ THÊM slug VÀO DTO
 
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   price?: number;
@@ -72,7 +80,7 @@ export class UpdateProductDto {
   @ArrayMinSize(1)
   @Type(() => Number)
   @IsNumber({}, { each: true })
-  category_ids: number[];
+  productCategories: number[];
 
   @IsBoolean()
   @IsOptional()
@@ -87,4 +95,26 @@ export class UpdateProductDto {
   @Type(() => UpdateProductVariantDto)
   @IsOptional()
   variants?: UpdateProductVariantDto[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => UpdateProductAttributeDto)
+  @IsOptional()
+  attributes?: UpdateProductAttributeDto[];
+}
+export class UpdateProductAttributeDto {
+  @IsOptional()
+  @IsNumber()
+  id?: number;
+
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  value?: string;
+
+  @IsOptional()
+  created_at?: Date;
 }

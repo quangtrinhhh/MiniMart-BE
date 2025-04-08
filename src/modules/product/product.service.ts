@@ -8,10 +8,21 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from './entities/product.entity';
 import { Asset } from '../assets/entities/asset.entity';
 import { ProductAsset } from '../productasset/entities/productasset.entity';
-import { DataSource, EntityManager, In, MoreThan, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  In,
+  MoreThan,
+  QueryRunner,
+  Repository,
+} from 'typeorm';
 import { Category } from '../category/entities/category.entity';
 import slugify from 'slugify';
-import { UpdateProductDto } from './dto/update-product.dto';
+import {
+  UpdateProductAttributeDto,
+  UpdateProductDto,
+  UpdateProductVariantDto,
+} from './dto/update-product.dto';
 import aqp from 'api-query-params';
 import { AssetsService } from '../assets/assets.service';
 import { ProductVariant } from '../product-variant/entities/product-variant.entity';
@@ -19,6 +30,7 @@ import { ProductCategory } from '../category/entities/product-category.entity';
 import { ImageUploadService } from 'src/services/image-upload.service';
 import { CategoryService } from '../category/category.service';
 import { RedisService } from '../redis/redis.service';
+import { ProductAttribute } from '../product-attribute/entities/product-attribute.entity';
 
 @Injectable()
 export class ProductService {
@@ -33,6 +45,8 @@ export class ProductService {
     private productVariantRepository: Repository<ProductVariant>,
     @InjectRepository(ProductCategory)
     private productCategoryRepository: Repository<ProductCategory>,
+    @InjectRepository(ProductAttribute)
+    private productAttributeRepository: Repository<ProductAttribute>,
 
     private readonly assetsService: AssetsService,
     private readonly categoryService: CategoryService,
@@ -135,7 +149,63 @@ export class ProductService {
       await queryRunner.release();
     }
   }
+  // Cập nhật sản phẩm
+  async update(
+    id: number,
+    updateProductDto: UpdateProductDto,
+    file?: Express.Multer.File,
+  ) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
+    try {
+      const product = await this.getProductOrFail(queryRunner, id);
+
+      const { variants, productCategories, attributes, ...productData } =
+        updateProductDto;
+
+      if (productData.name) {
+        productData.slug = slugify(productData.name, { lower: true });
+      }
+
+      await this.updateProductMainData(queryRunner, product, productData);
+      await this.updateProductCategories(
+        queryRunner,
+        product,
+        productCategories,
+      );
+      const categoryIdForSKU =
+        productCategories?.[0] ??
+        product.productCategories[0]?.category?.id ??
+        0;
+      await this.updateProductVariants(
+        queryRunner,
+        product,
+        variants,
+        categoryIdForSKU,
+      );
+      await this.updateProductAttributes(queryRunner, product, attributes);
+      await this.updateProductImage(queryRunner, product, file);
+
+      await queryRunner.commitTransaction();
+
+      return await queryRunner.manager.findOne(Product, {
+        where: { id },
+        relations: ['productCategories', 'assets', 'variants', 'attributes'],
+      });
+    } catch (error) {
+      if (queryRunner.isTransactionActive) {
+        await queryRunner.rollbackTransaction();
+      }
+      console.error('❌ Lỗi khi cập nhật sản phẩm:', error);
+      throw new BadRequestException(
+        `Lỗi khi cập nhật sản phẩm: ${error instanceof Error ? error.message : error}`,
+      );
+    } finally {
+      await queryRunner.release();
+    }
+  }
   /**
    *
    */
@@ -219,131 +289,6 @@ export class ProductService {
     await this.redisService.set(cacheKey, JSON.stringify(result), 3600);
 
     return { result };
-  }
-
-  async update(
-    id: number,
-    updateProductDto: UpdateProductDto,
-    file?: Express.Multer.File,
-  ) {
-    const queryRunner = this.dataSource.createQueryRunner();
-
-    try {
-      // ✅ Bắt đầu transaction
-      await queryRunner.connect();
-      await queryRunner.startTransaction();
-
-      // ✅ Tìm sản phẩm
-      const product = await queryRunner.manager.findOne(Product, {
-        where: { id },
-        relations: ['productCategories', 'assets', 'variants'],
-      });
-
-      if (!product) {
-        throw new BadRequestException('Không tìm thấy sản phẩm để update');
-      }
-
-      // ✅ Xử lý thêm danh mục mới mà không xóa danh mục cũ
-      if (updateProductDto.category_ids?.length) {
-        const categories = await queryRunner.manager.findByIds(
-          Category,
-          updateProductDto.category_ids, // ✅ Lấy danh mục từ Category, không phải Product
-        );
-
-        if (!categories.length) {
-          throw new BadRequestException('Không tìm thấy danh mục hợp lệ');
-        }
-
-        // Lấy danh mục hiện có của sản phẩm
-        const existingProductCategories = await queryRunner.manager.find(
-          ProductCategory,
-          {
-            where: { product: { id } },
-            relations: ['category'],
-          },
-        );
-
-        // Lấy danh sách ID danh mục đã tồn tại
-        const existingCategoryIds = existingProductCategories
-          .filter((pc) => pc.category) // Tránh lỗi undefined
-          .map((pc) => pc.category.id);
-
-        // Lọc ra danh mục mới chưa có
-        const newCategories = categories.filter(
-          (category) => !existingCategoryIds.includes(category.id),
-        );
-
-        // Tạo & lưu danh mục mới
-        if (newCategories.length > 0) {
-          const newProductCategories = newCategories.map((category) =>
-            queryRunner.manager.create(ProductCategory, { product, category }),
-          );
-
-          await queryRunner.manager.save(newProductCategories);
-        }
-      }
-
-      // ✅ Cập nhật thông tin sản phẩm
-      if (updateProductDto.name) {
-        updateProductDto.slug = slugify(updateProductDto.name, { lower: true });
-      }
-      await queryRunner.manager.update(Product, id, updateProductDto);
-
-      // ✅ Cập nhật biến thể sản phẩm
-      if (updateProductDto.variants) {
-        for (const variantDto of updateProductDto.variants) {
-          if (variantDto.id) {
-            await queryRunner.manager.update(
-              ProductVariant,
-              variantDto.id,
-              variantDto,
-            );
-          }
-        }
-      }
-
-      // ✅ Cập nhật ảnh sản phẩm nếu có file mới
-      if (file) {
-        const existingAsset = product.assets[0]?.asset;
-        if (existingAsset) {
-          await queryRunner.manager.delete(Asset, existingAsset.id);
-        }
-        const { link, type, size } =
-          await this.imageUploadService.uploadImage(file);
-        const newAsset = queryRunner.manager.create(Asset, {
-          filename: file.originalname,
-          path: link,
-          type,
-          size,
-        });
-        await queryRunner.manager.save(newAsset);
-
-        const newProductAsset = queryRunner.manager.create(ProductAsset, {
-          product,
-          asset: newAsset,
-          type: 'gallery',
-        });
-        await queryRunner.manager.save(newProductAsset);
-      }
-
-      // ✅ Commit transaction nếu thành công
-      await queryRunner.commitTransaction();
-
-      // ✅ Trả về sản phẩm đã cập nhật
-      return await queryRunner.manager.findOne(Product, {
-        where: { id },
-        relations: ['productCategories', 'assets', 'variants'],
-      });
-    } catch (error) {
-      // ❌ Rollback transaction nếu có lỗi
-      if (queryRunner.isTransactionActive) {
-        await queryRunner.rollbackTransaction();
-      }
-      console.error('❌ Lỗi khi cập nhật sản phẩm:', error);
-      throw new BadRequestException(`Lỗi khi cập nhật sản phẩm: ${error}`);
-    } finally {
-      await queryRunner.release();
-    }
   }
 
   async remove(id: number) {
@@ -597,5 +542,199 @@ export class ProductService {
       : 'DEFAULT';
 
     return `${variantSlug}-${categoryCode}-${productCode}-${variantCode}}`;
+  }
+  //****************** */
+  private async getProductOrFail(queryRunner: QueryRunner, id: number) {
+    const product = await queryRunner.manager.findOne(Product, {
+      where: { id },
+      relations: ['productCategories', 'assets', 'variants', 'attributes'],
+    });
+
+    if (!product) {
+      throw new BadRequestException('Không tìm thấy sản phẩm để update');
+    }
+
+    return product;
+  }
+
+  private async updateProductMainData(
+    queryRunner: QueryRunner,
+    product: Product,
+    data: Partial<Product>,
+  ) {
+    const updates: Partial<Product> = {};
+    for (const key in data) {
+      if (
+        Object.prototype.hasOwnProperty.call(data, key) &&
+        data[key] !== undefined &&
+        product &&
+        product[key] !== undefined &&
+        data[key] !== product[key]
+      ) {
+        updates[key] = data[key] as Product[keyof Product];
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      await queryRunner.manager.update(Product, product.id, updates);
+    }
+  }
+
+  private async updateProductCategories(
+    queryRunner: QueryRunner,
+    product: Product,
+    categoryIds?: number[],
+  ) {
+    if (!categoryIds) return;
+
+    // Lấy lại categoryId hiện có
+    const current = await queryRunner.manager.find(ProductCategory, {
+      where: { product: { id: product.id } },
+      relations: ['category'],
+    });
+
+    const currentIds = current
+      .map((pc) => pc.category?.id)
+      .filter((id): id is number => typeof id === 'number');
+
+    const toAdd = categoryIds.filter((id) => !currentIds.includes(id));
+    const toRemove = currentIds.filter((id) => !categoryIds.includes(id));
+
+    if (toRemove.length > 0) {
+      await queryRunner.manager.delete(ProductCategory, {
+        product: { id: product.id },
+        category: { id: In(toRemove) },
+      });
+    }
+
+    if (toAdd.length > 0) {
+      const newCategories = await queryRunner.manager.findByIds(
+        Category,
+        toAdd,
+      );
+      const newRelations = newCategories.map((category) =>
+        queryRunner.manager.create(ProductCategory, { product, category }),
+      );
+      await queryRunner.manager.save(newRelations);
+    }
+  }
+
+  private async updateProductVariants(
+    queryRunner: QueryRunner,
+    product: Product,
+    variants?: UpdateProductVariantDto[],
+    categoryIdForSKU?: number,
+  ) {
+    if (!variants) return;
+
+    const variantRepo = queryRunner.manager.getRepository(ProductVariant);
+    const existingMap = new Map(product.variants.map((v) => [v.id, v]));
+    const incomingMap = new Map(
+      variants.filter((v) => v.id).map((v) => [v.id!, v]),
+    );
+
+    // Xoá các variant không còn trong payload
+    const toDelete = product.variants.filter((v) => !incomingMap.has(v.id));
+    if (toDelete.length > 0) {
+      await variantRepo.delete(toDelete.map((v) => v.id));
+    }
+
+    for (const variant of variants) {
+      const isExisting = variant.id && existingMap.has(variant.id);
+
+      if (isExisting) {
+        const existing = existingMap.get(variant.id!)!;
+        const hasChanges = Object.entries(variant).some(
+          ([key, value]) =>
+            value !== undefined &&
+            value !== existing[key as keyof ProductVariant],
+        );
+
+        if (hasChanges) {
+          await variantRepo.update(variant.id!, {
+            ...variant,
+            // Giữ lại SKU cũ nếu không truyền mới
+            SKU: variant.sku ?? existing.SKU,
+          });
+        }
+      } else {
+        // Tạo mới variant
+        const newVariant = variantRepo.create({
+          ...variant,
+          SKU:
+            variant.sku ??
+            this.generateSKU(
+              categoryIdForSKU ?? 0,
+              product.id,
+              product.variants.length + 1,
+              variant.name,
+            ),
+          product,
+        });
+        await variantRepo.save(newVariant);
+      }
+    }
+  }
+
+  private async updateProductImage(
+    queryRunner: QueryRunner,
+    product: Product,
+    file?: Express.Multer.File,
+  ) {
+    if (!file) return;
+
+    const existingAsset = product.assets[0]?.asset;
+    if (!existingAsset || file.originalname !== existingAsset.filename) {
+      if (existingAsset) {
+        await queryRunner.manager.delete(Asset, existingAsset.id);
+      }
+
+      const { link, type, size } =
+        await this.imageUploadService.uploadImage(file);
+
+      const newAsset = queryRunner.manager.create(Asset, {
+        filename: file.originalname,
+        path: link,
+        type,
+        size,
+      });
+      await queryRunner.manager.save(newAsset);
+
+      const newProductAsset = queryRunner.manager.create(ProductAsset, {
+        product,
+        asset: newAsset,
+        type: 'gallery',
+      });
+      await queryRunner.manager.save(newProductAsset);
+    }
+  }
+
+  private async updateProductAttributes(
+    queryRunner: QueryRunner,
+    product: Product,
+    attributes: UpdateProductAttributeDto[] = [],
+  ) {
+    const repo = queryRunner.manager.getRepository(ProductAttribute);
+    const existing = product.attributes;
+    const existingKeyMap = new Map(
+      existing.map((a) => [`${a.name}:${a.value}`, a]),
+    );
+    const incomingKeyMap = new Map(
+      attributes.map((a) => [`${a.name}:${a.value}`, a]),
+    );
+
+    const toRemove = existing.filter(
+      (a) => !incomingKeyMap.has(`${a.name}:${a.value}`),
+    );
+    if (toRemove.length > 0) {
+      await repo.remove(toRemove);
+    }
+
+    const toAdd = attributes.filter(
+      (a) => !existingKeyMap.has(`${a.name}:${a.value}`),
+    );
+    if (toAdd.length > 0) {
+      const newAttrs = toAdd.map((a) => repo.create({ product, ...a }));
+      await repo.save(newAttrs);
+    }
   }
 }

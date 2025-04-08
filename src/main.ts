@@ -7,8 +7,12 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1', { exclude: [``] });
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
+      whitelist: true, // Tự động loại bỏ field thừa
+      forbidNonWhitelisted: true, // Ngăn không cho field lạ lọt vào
+      transform: true, // Biến string -> number, v.v.
+      transformOptions: {
+        enableImplicitConversion: true, // Cho phép auto transform dựa vào kiểu khai báo
+      },
     }),
   );
   app.enableCors({
