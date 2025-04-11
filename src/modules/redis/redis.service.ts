@@ -7,10 +7,18 @@ export class RedisService {
 
   async set<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
     const serialized = JSON.stringify(value);
-    if (ttlSeconds) {
-      await this.redis.set(key, serialized, 'EX', ttlSeconds);
-    } else {
-      await this.redis.set(key, serialized);
+    try {
+      if (ttlSeconds) {
+        await this.redis.set(key, serialized, 'EX', ttlSeconds);
+        console.log(
+          `✅ [Redis SET] Key: "${key}" được lưu với TTL ${ttlSeconds}s`,
+        );
+      } else {
+        await this.redis.set(key, serialized);
+        console.log(`✅ [Redis SET] Key: "${key}" được lưu không có TTL`);
+      }
+    } catch (error) {
+      console.error(`❌ [Redis SET] Lỗi khi ghi key "${key}":`, error);
     }
   }
 

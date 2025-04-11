@@ -31,6 +31,7 @@ import { ImageUploadService } from 'src/services/image-upload.service';
 import { CategoryService } from '../category/category.service';
 import { RedisService } from '../redis/redis.service';
 import { ProductAttribute } from '../product-attribute/entities/product-attribute.entity';
+import { ProductFilterDto } from './dto/ProductFilterDto.dto';
 
 @Injectable()
 export class ProductService {
@@ -189,7 +190,11 @@ export class ProductService {
       await this.updateProductImage(queryRunner, product, file);
 
       await queryRunner.commitTransaction();
-
+      await this.invalidateProductCaches(
+        product,
+        product.slug,
+        product.discount,
+      );
       return await queryRunner.manager.findOne(Product, {
         where: { id },
         relations: ['productCategories', 'assets', 'variants', 'attributes'],
@@ -248,6 +253,115 @@ export class ProductService {
     return {
       result,
     };
+  }
+
+  async findAllWithFilter(filter: ProductFilterDto): Promise<{
+    result: Product[];
+    totalItems: number;
+    totalPages: number;
+  }> {
+    const {
+      priceRanges = [],
+      colors = [],
+      categoryIds = [],
+      keyword,
+      pageSize = 10,
+      current = 1,
+      sortBy,
+    } = filter;
+    const cacheKey = `products:filter:${JSON.stringify(filter)}`;
+    // Kiểm tra cache Redis trước khi truy vấn DB
+    const cachedResult = await this.redisService.get<unknown>(cacheKey);
+    if (cachedResult) {
+      console.log('✅ Trả về dữ liệu từ cache Redis');
+      return cachedResult as {
+        result: Product[];
+        totalItems: number;
+        totalPages: number;
+      };
+    }
+    // Tạo truy vấn
+    const qb = this.productRepository
+      .createQueryBuilder('product')
+      .leftJoinAndSelect('product.variants', 'variant')
+      .leftJoinAndSelect('product.attributes', 'attributes')
+      .leftJoinAndSelect('product.productCategories', 'productCategory')
+      .leftJoinAndSelect('productCategory.category', 'category')
+      .leftJoinAndSelect('product.assets', 'productAsset')
+      .leftJoinAndSelect('productAsset.asset', 'asset');
+
+    // Search keyword
+    if (keyword?.trim()) {
+      qb.andWhere('product.name ILIKE :keyword', {
+        keyword: `%${keyword.trim()}%`,
+      });
+    }
+
+    // Price ranges
+    const priceParams: Record<string, number> = {};
+    const priceConditions: string[] = [];
+
+    priceRanges.forEach((range, idx) => {
+      const [min, max] = range.split('-').map(Number);
+      if (!isNaN(min) && !isNaN(max)) {
+        priceConditions.push(
+          `(product.price BETWEEN :min${idx} AND :max${idx})`,
+        );
+        priceParams[`min${idx}`] = min;
+        priceParams[`max${idx}`] = max;
+      }
+    });
+
+    if (priceConditions.length > 0 && priceConditions.some((c) => c !== '')) {
+      qb.andWhere(`(${priceConditions.join(' OR ')})`, priceParams);
+    }
+
+    // Filter by color attributes
+    const validColors = colors.filter((c) => c?.trim() !== '');
+    if (validColors.length > 0) {
+      qb.andWhere(
+        `attributes.name = 'color' AND attributes.value IN (:...colors)`,
+        { colors: validColors },
+      );
+    }
+
+    // Filter by categories
+    if (categoryIds.length > 0) {
+      qb.andWhere('category.id IN (:...categoryIds)', {
+        categoryIds,
+      });
+    }
+
+    const sortMap: Record<string, { field: string; order: 'ASC' | 'DESC' }> = {
+      'name:asc': { field: 'product.name', order: 'ASC' },
+      'name:desc': { field: 'product.name', order: 'DESC' },
+      'price_min:asc': { field: 'product.price', order: 'ASC' },
+      'price_min:desc': { field: 'product.price', order: 'DESC' },
+      'created_on:asc': { field: 'product.created_at', order: 'ASC' },
+      'created_on:desc': { field: 'product.created_at', order: 'DESC' },
+    };
+
+    const sortOption = sortMap[sortBy as keyof typeof sortMap] ?? {
+      field: 'product.created_at',
+      order: 'DESC',
+    };
+    qb.orderBy(sortOption.field, sortOption.order);
+
+    // Pagination
+    const [products, totalItems] = await qb
+      .skip((current - 1) * pageSize)
+      .take(pageSize)
+      .getManyAndCount();
+
+    const response = {
+      result: products,
+      totalItems,
+      totalPages: Math.ceil(totalItems / pageSize),
+    };
+
+    // 4. Ghi dữ liệu vào Redis cache (ví dụ 300 giây = 5 phút)
+    await this.redisService.set(cacheKey, response, 300);
+    return response;
   }
 
   async findOne(slug: string) {
@@ -326,7 +440,7 @@ export class ProductService {
 
       // ✅ Xóa sản phẩm chính
       await queryRunner.manager.delete(Product, id);
-
+      await this.invalidateProductCaches(product);
       // ✅ Commit transaction
       await queryRunner.commitTransaction();
       const cacheKey = `product:${product.slug}`; // Chỉ xóa cache của sản phẩm theo slug
@@ -347,8 +461,24 @@ export class ProductService {
       await queryRunner.release();
     }
   }
+  async searchProducts(keyword: string): Promise<Product[]> {
+    return this.productRepository
+      .createQueryBuilder('product')
+      .where(`product.name @@ plainto_tsquery(:keyword)`, { keyword })
+      .orWhere('product.name ILIKE :name', { name: `%${keyword}%` })
+      .orderBy(
+        `ts_rank_cd(product.search_vector, plainto_tsquery(:keyword))`,
+        'DESC',
+      )
+      .limit(10)
+      .getMany();
+  }
   /***** */
   async getDiscountedProducts(limit = 10) {
+    const cacheKey = `discounted-products:limit:${limit}`;
+    const cached = await this.redisService.get<{ result: any[] }>(cacheKey);
+    if (cached) return cached;
+
     const discountedProducts = await this.productRepository.find({
       where: { discount: MoreThan(0) },
       order: { discount: 'DESC' },
@@ -356,7 +486,10 @@ export class ProductService {
       relations: ['variants'],
     });
 
-    return { result: discountedProducts };
+    const result = { result: discountedProducts };
+    await this.redisService.set(cacheKey, result, 60 * 5); // TTL: 5 phút
+
+    return result;
   }
 
   async getProductsByCategory(categoryId: number) {
@@ -467,56 +600,54 @@ export class ProductService {
     });
   }
   //
-  async getProductBySlugCategory(
-    slug: string,
-    query: string,
-    current = 1,
-    pageSize = 10,
-  ) {
-    // Phân tích query để lấy filter và sort từ aqp (Active Query Parser)
-    const { filter, sort } = aqp(query);
-
-    // Xoá các trường không cần thiết trong filter
-    delete filter.pageSize;
-    delete filter.current;
-
-    // Thiết lập giá trị mặc định cho sort (nếu không có)
-    const orderBy = sort || { id: 'DESC' };
-
-    // Tìm kiếm category theo slug
+  async getProductBySlugCategory(slug: string, filter: ProductFilterDto) {
     const category = await this.categoryService.findOneSlug(slug);
     if (!category) {
       throw new BadRequestException('Không tìm thấy danh mục nào.');
     }
 
-    // Tính toán offset và limit cho phân trang
-    const offset = (current - 1) * pageSize;
-    const limit = pageSize;
+    // Inject categoryId vào DTO để tận dụng filter logic chung
+    const filterDto: ProductFilterDto = {
+      ...filter,
+      categoryIds: [category.id],
+    };
 
-    // Lấy tổng số sản phẩm thuộc category
-    const [productCategories, totalItems] =
-      await this.productCategoryRepository.findAndCount({
-        where: { category: { id: category.id } },
-        relations: ['product', 'product.assets', 'product.assets.asset'], // Liên kết với product và asset của sản phẩm
-        skip: offset, // Sử dụng offset cho phân trang
-        take: limit, // Giới hạn số lượng sản phẩm
-        order: orderBy, // Sắp xếp theo trường đã cung cấp
-      });
-
-    // Lấy danh sách các sản phẩm từ mối quan hệ với ProductCategory
-    const products = productCategories.map(
-      (productCategory) => productCategory.product,
-    );
-
-    // Tính toán số trang
-    const totalPages = Math.ceil(totalItems / pageSize);
+    const paginatedResult = await this.findAllWithFilter(filterDto);
 
     return {
       category: category.name,
-      products,
-      totalItems,
-      totalPages,
+      ...paginatedResult,
     };
+  }
+
+  //
+  async invalidateProductCaches(
+    product: Product,
+    oldSlug?: string,
+    oldDiscount?: number,
+  ) {
+    // 1. Xoá cache chi tiết sản phẩm theo slug
+    const slugKey = `product:${oldSlug || product.slug}`;
+    await this.redisService.del(slugKey);
+
+    // 2. Xoá tất cả danh sách sản phẩm có thể chứa sản phẩm này
+    const listKeys = await this.redisService.scanKeys('products:*');
+    for (const key of listKeys) {
+      await this.redisService.del(key);
+    }
+
+    // 3. Nếu sản phẩm có discount thay đổi, xóa cache giảm giá
+    const wasDiscounted = oldDiscount && oldDiscount > 0;
+    const isDiscounted = product.discount > 0;
+
+    if (wasDiscounted || isDiscounted) {
+      const discountKeys = await this.redisService.scanKeys(
+        'discounted-products:*',
+      );
+      for (const key of discountKeys) {
+        await this.redisService.del(key);
+      }
+    }
   }
 
   /**

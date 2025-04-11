@@ -16,6 +16,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { Public } from 'src/decorator/customize';
+import { ProductFilterDto } from './dto/ProductFilterDto.dto';
 
 @Controller('product')
 export class ProductController {
@@ -30,6 +31,17 @@ export class ProductController {
   async getProductsByCategory(@Param('id') categoryId: number) {
     return await this.productService.getProductsByCategory(categoryId);
   }
+  @Get('search')
+  @Public()
+  async searchProducts(@Query('q') keyword: string) {
+    return this.productService.searchProducts(keyword);
+  }
+  @Get('/filter')
+  @Public()
+  async getProductsByFilter(@Query() filter: ProductFilterDto) {
+    console.log(filter);
+    return await this.productService.findAllWithFilter(filter);
+  }
 
   @Get('/:id/related')
   @Public()
@@ -41,16 +53,9 @@ export class ProductController {
   @Get('category/:slug')
   async getProductBySlugCategory(
     @Param('slug') slug: string,
-    @Query('filter') filter: string, // Lọc theo query (ví dụ: filter={"price": ">100"})
-    @Query('current') current: number = 1, // Số trang hiện tại
-    @Query('pageSize') pageSize: number = 10, // Kích thước trang
+    @Query() filter: ProductFilterDto,
   ) {
-    return await this.productService.getProductBySlugCategory(
-      slug,
-      filter,
-      current,
-      pageSize,
-    );
+    return await this.productService.getProductBySlugCategory(slug, filter);
   }
   /******************************************************************* */
   @UseInterceptors(FilesInterceptor('images', 5))
