@@ -26,6 +26,12 @@ import { Public } from 'src/decorator/customize';
 export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
 
+  @Get('menu')
+  @Public()
+  async getCategoryMenu() {
+    return this.categoryService.getCategoryMenu();
+  }
+
   @Get('parentcategories')
   @Public()
   async getAllParentCategories() {

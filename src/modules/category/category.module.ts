@@ -6,9 +6,14 @@ import { Category } from './entities/category.entity';
 import { AuthModule } from 'src/auth/auth.module';
 import { ImageUploadService } from 'src/services/image-upload.service';
 import { ProductCategory } from './entities/product-category.entity';
+import { RedisModule } from '../redis/redis.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Category, ProductCategory]), AuthModule],
+  imports: [
+    TypeOrmModule.forFeature([Category, ProductCategory]),
+    AuthModule,
+    RedisModule,
+  ],
   controllers: [CategoryController],
   providers: [CategoryService, ImageUploadService],
   exports: [CategoryService],

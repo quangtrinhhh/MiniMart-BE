@@ -1,0 +1,81 @@
+<html>
+  <head>
+    <meta charset='UTF-8' />
+    <title>Payment Confirmation</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+  </head>
+  <body
+    style='font-family: Arial, sans-serif; background-color: #FAFAFA; padding: 20px; color: #333;'
+  >
+    <div
+      style='max-width: 700px; margin: auto; background-color: #ffffff; padding: 24px; border-radius: 8px; box-shadow: 0 0 8px rgba(0,0,0,0.05);'
+    >
+      <h2 style='color: #0070f3; text-align: center;'>Payment Confirmation</h2>
+
+      <p>Hello {{customerName}},</p>
+
+      <p>Thank you for shopping at
+        <strong>EGA Mini Mart</strong>! Below is the summary of your purchase:</p>
+
+      <table
+        width='100%'
+        cellspacing='0'
+        cellpadding='12'
+        style='border-collapse: collapse; font-size: 14px;'
+      >
+        <thead>
+          <tr style='background-color: #f2f2f2;'>
+            <th align='left'>Product</th>
+            <th align='center'>Image</th>
+            <th align='center'>Qty</th>
+            <th align='right'>Unit Price</th>
+            <th align='right'>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each items}}
+            <tr>
+              <td>{{this.name}}</td>
+              <td align='center'>
+                <img
+                  src='{{this.image}}'
+                  alt='{{this.name}}'
+                  style='max-width: 60px; max-height: 60px; border-radius: 4px;'
+                />
+              </td>
+              <td align='center'>{{this.quantity}}</td>
+              <td align='right'>{{this.unitPrice}}₫</td>
+              <td align='right'>{{this.totalPrice}}₫</td>
+            </tr>
+          {{/each}}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan='4' align='right'><strong>Discount:</strong></td>
+            <td align='right'>-{{discount}}₫</td>
+          </tr>
+          <tr>
+            <td colspan='4' align='right'><strong>VAT:</strong></td>
+            <td align='right'>{{vat}}₫</td>
+          </tr>
+          <tr>
+            <td colspan='4' align='right'><strong>Total Amount:</strong></td>
+            <td align='right'><strong>{{totalAmount}}₫</strong></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <p><strong>Payment Method:</strong> {{paymentMethod}}</p>
+      <p><strong>Transaction Time:</strong> {{transactionTime}}</p>
+
+      <hr style='margin: 32px 0;' />
+
+      <p>If you have any questions or concerns, feel free to contact us. We look
+        forward to serving you again!</p>
+
+      <p style='text-align: center; font-size: 12px; color: #999;'>&copy;
+        {{year}}
+        EGA Mini Mart</p>
+    </div>
+  </body>
+</html>

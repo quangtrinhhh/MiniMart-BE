@@ -10,6 +10,8 @@ import { OrderItem } from '../orderitem/entities/orderitem.entity';
 import { OrdersModule } from '../orders/orders.module';
 import { VNPayModule } from '../vnpay/vnpay.module';
 import { CartModule } from '../cart/cart.module';
+import { EmailModule } from '../email/email.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { CartModule } from '../cart/cart.module';
     OrdersModule,
     forwardRef(() => VNPayModule),
     CartModule,
+    EmailModule,
+    UsersModule,
   ],
   providers: [CheckoutService],
   controllers: [CheckoutController],

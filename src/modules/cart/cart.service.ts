@@ -213,7 +213,9 @@ export class CartService {
     if (!cart) {
       throw new NotFoundException('Cart not found');
     }
-
+    if (cart.cartItems.length === 0) {
+      throw new BadRequestException('Giỏ hàng trống');
+    }
     return cart;
   }
 

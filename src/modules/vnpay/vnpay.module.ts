@@ -6,12 +6,14 @@ import { CheckoutModule } from '../checkout/checkout.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Order } from '../orders/entities/order.entity';
 import { OrdersModule } from '../orders/orders.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Order]),
     forwardRef(() => CheckoutModule),
     forwardRef(() => OrdersModule),
+    EmailModule,
   ],
   controllers: [VNPayController],
   providers: [VNPayService],

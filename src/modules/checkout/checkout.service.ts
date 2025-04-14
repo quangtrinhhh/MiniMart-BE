@@ -8,7 +8,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Order } from '../orders/entities/order.entity';
 import { Cart } from '../cart/entities/cart.entity';
 import { CartItem } from '../cartitem/entities/cartitem.entity';
-import { OrderItem } from '../orderitem/entities/orderitem.entity';
 import { Product } from '../product/entities/product.entity';
 import { EntityManager, Repository } from 'typeorm';
 import { VNPayService } from '../vnpay/vnpay.service';
@@ -19,6 +18,9 @@ import {
 } from 'src/common/enums/order-status.enum';
 import { CreateCheckoutDto } from './dto/create-checkout.dto';
 import { CartService } from '../cart/cart.service';
+import { EmailService } from '../email/email.service';
+import { UsersService } from '../users/users.service';
+import { OrdersService } from '../orders/orders.service';
 
 @Injectable()
 export class CheckoutService {
@@ -26,21 +28,17 @@ export class CheckoutService {
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
 
-    @InjectRepository(CartItem)
-    private readonly cartItemRepository: Repository<CartItem>,
-
-    @InjectRepository(OrderItem)
-    private readonly orderItemRepository: Repository<OrderItem>,
-
-    @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>,
-
     private readonly entityManager: EntityManager,
 
     @Inject(forwardRef(() => VNPayService))
     private readonly vnpayService: VNPayService,
 
     private readonly cartService: CartService,
+
+    private readonly emailService: EmailService,
+
+    private readonly userService: UsersService,
+    private readonly orderService: OrdersService,
   ) {}
 
   async checkout(
@@ -50,6 +48,8 @@ export class CheckoutService {
   ) {
     return this.entityManager.transaction(
       async (transactionalEntityManager) => {
+        const user = await this.userService.findOne(userId);
+
         // Kiểm tra giỏ hàng
         const cart = await this.cartService.getCartByUserId(userId);
         if (!cart || cart.cartItems.length === 0) {
@@ -66,76 +66,12 @@ export class CheckoutService {
           throw new Error('Giá không đúng với BE');
         }
 
-        // Tạo đơn hàng mới
-        const order = this.orderRepository.create({
-          user: { id: userId },
-          status: OrderStatus.PENDING,
-          payment_method: checkoutDto.payment_method,
-          payment_status: PaymentStatus.PROCESSING,
-          shipping_address: checkoutDto.shipping_address,
-          shipping_fee: checkoutDto.shipping_fee,
-          consignee_name: checkoutDto.consignee_name,
-          note: checkoutDto.note,
-          total: calculatedTotal,
-        });
-
-        const savedOrder = await transactionalEntityManager.save(order);
-
-        // Xử lý từng sản phẩm trong giỏ hàng
-        for (const item of cart.cartItems) {
-          if (!item.product) {
-            throw new BadRequestException(
-              `Mặt hàng trong giỏ hàng không hợp lệ: sản phẩm bị thiếu`,
-            );
-          }
-
-          const product = await transactionalEntityManager.findOne(Product, {
-            where: { id: item.product.id },
-            relations: ['variants'],
-          });
-
-          if (!product) {
-            throw new BadRequestException(
-              `Không tìm thấy sản phẩm: ${item.product.name}`,
-            );
-          }
-
-          // Kiểm tra số lượng tồn kho của sản phẩm hoặc biến thể
-          const productVariant = item.variant
-            ? product.variants.find((v) => v.id === item.variant?.id)
-            : null;
-
-          if (
-            (productVariant && productVariant.stock < item.quantity) ||
-            (productVariant === null && product.stock < item.quantity)
-          ) {
-            throw new BadRequestException(
-              `Không đủ số lượng cho sản phẩm ${product.name}`,
-            );
-          }
-
-          // Cập nhật tồn kho
-          if (productVariant) {
-            productVariant.stock -= item.quantity;
-            await transactionalEntityManager.save(productVariant);
-          } else {
-            product.stock -= item.quantity;
-            await transactionalEntityManager.save(product);
-          }
-
-          // Lưu thông tin đơn hàng
-          const imagePath = item.product.assets?.[0]?.asset?.path || null;
-          const orderItem = this.orderItemRepository.create({
-            order: savedOrder,
-            product,
-            quantity: item.quantity,
-            price: item.price,
-            name: item.product.name,
-            image: imagePath,
-            variant: item.variant ?? undefined,
-          });
-          await transactionalEntityManager.save(orderItem);
-        }
+        // Tạo đơn hàng mới và xử lý các sản phẩm trong giỏ hàng
+        const order = await this.orderService.createOrderAndItems(
+          userId,
+          checkoutDto,
+          transactionalEntityManager,
+        );
 
         // Xóa giỏ hàng nếu thanh toán COD
         if (checkoutDto.payment_method === PaymentMethod.COD) {
@@ -143,21 +79,27 @@ export class CheckoutService {
             cart: { id: cart.id },
           });
           await transactionalEntityManager.delete(Cart, { id: cart.id });
+
+          // Gửi email xác nhận đơn hàng
+          await this.emailService.sendOrderConfirmationEmail(
+            order, // Đã có order từ createOrderAndItems
+            user?.email || '',
+          );
         }
 
         // Xử lý thanh toán qua ngân hàng (VNPAY hoặc các cổng khác)
         if (checkoutDto.payment_method === PaymentMethod.BANK_TRANSFER) {
           return this.vnpayService.createPaymentUrl(
             {
-              orderInfo: savedOrder.id.toString(),
-              amount: Number(savedOrder.total + savedOrder.shipping_fee),
-              orderId: savedOrder.id.toString(),
+              orderInfo: order.id.toString(),
+              amount: Number(order.total + order.shipping_fee),
+              orderId: order.id.toString(),
             },
             ipAddr,
           );
         }
 
-        return { order: savedOrder };
+        return { order };
       },
     );
   }

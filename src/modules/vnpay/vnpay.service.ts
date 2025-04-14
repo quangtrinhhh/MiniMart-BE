@@ -7,8 +7,8 @@ import { CheckoutService } from '../checkout/checkout.service';
 import { PaymentStatus } from 'src/common/enums/order-status.enum';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Order } from '../orders/entities/order.entity';
-import { Repository } from 'typeorm';
 import { OrdersService } from '../orders/orders.service';
+import { EmailService } from '../email/email.service';
 
 interface CallbackResult {
   status: 'success' | 'failed' | 'invalid';
@@ -22,8 +22,9 @@ export class VNPayService {
     @Inject(forwardRef(() => CheckoutService))
     private readonly checkoutService: CheckoutService,
     @InjectRepository(Order)
-    private readonly orderRepository: Repository<Order>,
     private readonly ordersService: OrdersService,
+
+    private readonly emailService: EmailService,
   ) {}
   // Tạo URL thanh toán
   async createPaymentUrl(
@@ -111,6 +112,11 @@ export class VNPayService {
           Number(orderId),
           transactionStatus,
           Number(order.user.id),
+        );
+
+        await this.emailService.sendOrderConfirmationEmail(
+          order, // Đã có order từ createOrderAndItems
+          order.user.email || '', // Địa chỉ email của người dùng
         );
 
         return { status: 'success', orderId };

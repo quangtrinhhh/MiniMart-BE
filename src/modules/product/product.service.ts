@@ -405,6 +405,20 @@ export class ProductService {
     return { result };
   }
 
+  async findOneById(id: number) {
+    const product = await this.productRepository.findOne({
+      where: { id },
+      relations: [
+        'productCategories',
+        'productCategories.category',
+        'attributes',
+        'variants',
+      ],
+    });
+
+    if (!product) throw new NotFoundException('Không tìm thấy sản phẩm');
+    return product;
+  }
   async remove(id: number) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.startTransaction();

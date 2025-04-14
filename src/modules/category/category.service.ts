@@ -12,6 +12,9 @@ import slugify from 'slugify';
 import aqp from 'api-query-params';
 import { ImageUploadService } from 'src/services/image-upload.service';
 import { ProductCategory } from './entities/product-category.entity';
+import { plainToInstance } from 'class-transformer';
+import { CategoryMenuDto } from './dto/category-menu.dto';
+import { RedisService } from '../redis/redis.service';
 
 @Injectable()
 export class CategoryService {
@@ -21,6 +24,8 @@ export class CategoryService {
     @InjectRepository(ProductCategory)
     private productCategoryRepository: Repository<ProductCategory>,
     private readonly imageUploadService: ImageUploadService,
+
+    private readonly redisService: RedisService,
   ) {}
 
   async create(
@@ -159,7 +164,7 @@ export class CategoryService {
 
     // 🛠 Tiến hành cập nhật
     await this.categoryRepository.update(id, updateCategoryDto);
-
+    await this.invalidateCategoryCaches(category, category.slug);
     // 🔄 Trả về dữ liệu sau khi cập nhật (kèm quan hệ)
     return await this.categoryRepository.findOne({
       where: { id },
@@ -207,5 +212,69 @@ export class CategoryService {
       take: 8,
     });
     return { result };
+  }
+
+  async getCategoryMenu() {
+    const cacheKey = 'category_menu';
+    const cachedResult = await this.redisService.get<unknown>(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
+    const resultCategory = await this.categoryRepository.find({
+      where: { parent: IsNull() },
+      relations: ['children'],
+      order: { created_at: 'DESC' },
+      select: ['id', 'name', 'slug', 'image'],
+    });
+    const transformed = plainToInstance(CategoryMenuDto, resultCategory, {
+      excludeExtraneousValues: true,
+    });
+    const result = {
+      result: transformed,
+    };
+    await this.redisService.set(cacheKey, result, 3600);
+    return result;
+  }
+
+  async invalidateCategoryCaches(
+    category: Category,
+    oldSlug?: string,
+    isDeleted = false,
+  ) {
+    // 1. Xoá cache chi tiết category theo slug
+    const slugKey = `category:${oldSlug || category.slug}`;
+    await this.redisService.del(slugKey);
+
+    // 2. Xoá cache cây danh mục, menu, filter...
+    const patternKeys = [
+      'category_menu:*',
+      'category_tree:*',
+      'category_filter_options:*',
+      'categories:*',
+    ];
+
+    for (const pattern of patternKeys) {
+      const keys = await this.redisService.scanKeys(pattern);
+      for (const key of keys) {
+        await this.redisService.del(key);
+      }
+    }
+
+    // 3. Nếu danh mục bị xoá hoặc thay đổi parent, xoá cache các danh mục con
+    if (isDeleted || category.parent) {
+      const subTreeKeys = await this.redisService.scanKeys(
+        `category_descendants:${category.id}:*`,
+      );
+      for (const key of subTreeKeys) {
+        await this.redisService.del(key);
+      }
+    }
+
+    // 4. (Tuỳ chọn) Nếu danh mục liên quan tới sản phẩm, có thể xoá product caches
+    // Ví dụ:
+    // const productListKeys = await this.redisService.scanKeys('products:*');
+    // for (const key of productListKeys) {
+    //   await this.redisService.del(key);
+    // }
   }
 }

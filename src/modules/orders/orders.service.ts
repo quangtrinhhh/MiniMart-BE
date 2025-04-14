@@ -5,14 +5,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Order } from './entities/order.entity';
-import { DataSource, LessThan, Repository } from 'typeorm';
+import { DataSource, EntityManager, LessThan, Repository } from 'typeorm';
 import { OrderItem } from '../orderitem/entities/orderitem.entity';
 import { UsersService } from '../users/users.service';
 import { CartService } from '../cart/cart.service';
-// import { User } from '../users/entities/user.entity';
-// import { ProductVariant } from '../product-variant/entities/product-variant.entity';
-// import { Product } from '../product/entities/product.entity';
-// import { CreateOrderDto } from './dto/create-order.dto';
 import { RoleEnum } from 'src/common/enums/role.enum';
 import {
   OrderStatus,
@@ -20,6 +16,7 @@ import {
   PaymentStatus,
 } from 'src/common/enums/order-status.enum';
 import { ProductService } from '../product/product.service';
+import { CreateCheckoutDto } from '../checkout/dto/create-checkout.dto';
 
 @Injectable()
 export class OrdersService {
@@ -33,6 +30,95 @@ export class OrdersService {
     private readonly productService: ProductService,
     private readonly dataSource: DataSource,
   ) {}
+
+  async createOrderAndItems(
+    userId: number,
+    checkoutDto: CreateCheckoutDto,
+    transactionalEntityManager: EntityManager,
+  ) {
+    const cart = await this.cartService.getCartByUserId(userId);
+
+    const calculatedTotal = cart.cartItems.reduce(
+      (acc, item) => acc + item.price * item.quantity,
+      0,
+    );
+
+    // Tạo đơn hàng mới
+    const order = this.orderRepository.create({
+      user: { id: userId },
+      status: OrderStatus.PENDING,
+      payment_method: checkoutDto.payment_method,
+      payment_status: PaymentStatus.PROCESSING,
+      shipping_address: checkoutDto.shipping_address,
+      shipping_fee: checkoutDto.shipping_fee,
+      consignee_name: checkoutDto.consignee_name,
+      note: checkoutDto.note,
+      total: calculatedTotal,
+    });
+
+    // Đảm bảo bạn sử dụng await để lấy đối tượng Order thực tế
+    const savedOrder = await transactionalEntityManager.save(order);
+
+    // Khai báo orderItems với kiểu đúng
+    const orderItems: OrderItem[] = []; // Khai báo đúng kiểu mảng OrderItem
+
+    // Xử lý từng sản phẩm trong giỏ hàng
+    for (const item of cart.cartItems) {
+      if (!item.product) {
+        throw new BadRequestException(
+          `Mặt hàng trong giỏ hàng không hợp lệ: sản phẩm bị thiếu`,
+        );
+      }
+
+      const product = await this.productService.findOneById(item.product.id);
+
+      // Kiểm tra số lượng tồn kho của sản phẩm hoặc biến thể
+      const productVariant = item.variant
+        ? product.variants.find((v) => v.id === item.variant?.id)
+        : null;
+
+      if (
+        (productVariant && productVariant.stock < item.quantity) ||
+        (productVariant === null && product.stock < item.quantity)
+      ) {
+        throw new BadRequestException(
+          `Không đủ số lượng cho sản phẩm ${product.name}`,
+        );
+      }
+
+      // Cập nhật tồn kho
+      if (productVariant) {
+        productVariant.stock -= item.quantity;
+        await transactionalEntityManager.save(productVariant);
+      } else {
+        product.stock -= item.quantity;
+        await transactionalEntityManager.save(product);
+      }
+
+      // Lưu thông tin đơn hàng
+      const imagePath = item.product.assets?.[0]?.asset?.path || null;
+      const orderItem = this.orderItemRepository.create({
+        order: savedOrder,
+        product,
+        quantity: item.quantity,
+        price: item.price,
+        name: item.product.name,
+        image: imagePath,
+        variant: item.variant ?? undefined,
+      });
+
+      const savedOrderItem = await transactionalEntityManager.save(orderItem);
+
+      // Thêm orderItem đã lưu vào danh sách orderItems
+      orderItems.push(savedOrderItem); // Không còn lỗi nữa vì khai báo đúng kiểu
+    }
+
+    // Cập nhật lại order để trả về cả orderItems
+    savedOrder.orderItems = orderItems;
+
+    // Trả về cả đơn hàng và orderItems
+    return savedOrder;
+  }
 
   async getOrdersByUser(userId: number): Promise<Order[]> {
     return this.orderRepository
@@ -245,6 +331,7 @@ export class OrdersService {
           delivery_at: true,
           user: {
             id: true, // Chỉ lấy user.id
+            email: true,
           },
           orderItems: {
             id: true,
