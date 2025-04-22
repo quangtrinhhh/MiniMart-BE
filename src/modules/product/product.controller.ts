@@ -18,7 +18,7 @@ import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { Public } from 'src/decorator/customize';
 import { ProductFilterDto } from './dto/ProductFilterDto.dto';
 
-@Controller('product')
+@Controller('products')
 export class ProductController {
   constructor(private readonly productService: ProductService) {}
   @Get('/discounted')

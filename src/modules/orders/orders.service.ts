@@ -351,6 +351,7 @@ export class OrdersService {
         console.error(`❌ Order not found: ${orderId}`);
         return null;
       }
+      console.log('orderById: ', order);
 
       return order;
     } catch (error: unknown) {

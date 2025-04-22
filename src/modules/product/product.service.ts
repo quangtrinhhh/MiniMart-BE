@@ -32,6 +32,8 @@ import { CategoryService } from '../category/category.service';
 import { RedisService } from '../redis/redis.service';
 import { ProductAttribute } from '../product-attribute/entities/product-attribute.entity';
 import { ProductFilterDto } from './dto/ProductFilterDto.dto';
+import { plainToInstance } from 'class-transformer';
+import { ProductDetailDto } from './dto/product.dto';
 
 @Injectable()
 export class ProductService {
@@ -365,24 +367,28 @@ export class ProductService {
   }
 
   async findOne(slug: string) {
-    const cacheKey = `product:${slug}`; // Tạo khóa cache theo slug
+    const cacheKey = `product:${slug}`;
 
-    // Kiểm tra xem sản phẩm đã có trong cache chưa
+    // 1. Kiểm tra cache Redis
     const cachedProduct = await this.redisService.get(cacheKey);
-
     if (cachedProduct && typeof cachedProduct === 'string') {
-      // Nếu có, trả về ngay kết quả từ cache
       console.log('✅ Trả về dữ liệu từ cache Redis');
-
-      return { result: JSON.parse(cachedProduct) as Product };
+      const parsed = JSON.parse(cachedProduct) as Product;
+      return {
+        result: plainToInstance(ProductDetailDto, parsed, {
+          excludeExtraneousValues: true,
+        }),
+      };
     }
 
-    // Nếu không có trong cache, truy vấn cơ sở dữ liệu
+    // 2. Truy vấn cơ sở dữ liệu
     const product = await this.productRepository.findOne({
       where: { slug },
       relations: [
         'productCategories',
         'productCategories.category',
+        'assets',
+        'assets.asset',
         'attributes',
         'variants',
       ],
@@ -390,19 +396,24 @@ export class ProductService {
 
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm');
 
-    // Chuyển đổi productCategories thành categories
-    const transformedProduct = {
+    // 3. Biến đổi dữ liệu: productCategories → categories
+    const plainProduct = {
       ...product,
       categories: product.productCategories.map((pc) => pc.category),
     };
 
-    // Tách productCategories ra khỏi kết quả trả về
-    const result = transformedProduct;
+    // Xóa field không cần thiết trước khi trả về
+    delete (plainProduct as Partial<Product>).productCategories;
 
-    // Lưu vào Redis với TTL (ví dụ 1 giờ)
-    await this.redisService.set(cacheKey, JSON.stringify(result), 3600);
+    // 4. Chuyển sang DTO
+    const dto = plainToInstance(ProductDetailDto, plainProduct, {
+      excludeExtraneousValues: true,
+    });
 
-    return { result };
+    // 5. Cache lại dữ liệu dạng thô (không cần cache DTO)
+    await this.redisService.set(cacheKey, JSON.stringify(plainProduct), 3600);
+
+    return { result: dto };
   }
 
   async findOneById(id: number) {

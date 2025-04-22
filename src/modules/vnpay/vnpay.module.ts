@@ -12,7 +12,7 @@ import { EmailModule } from '../email/email.module';
   imports: [
     TypeOrmModule.forFeature([Order]),
     forwardRef(() => CheckoutModule),
-    forwardRef(() => OrdersModule),
+    OrdersModule,
     EmailModule,
   ],
   controllers: [VNPayController],

@@ -5,8 +5,6 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import moment from 'moment';
 import { CheckoutService } from '../checkout/checkout.service';
 import { PaymentStatus } from 'src/common/enums/order-status.enum';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Order } from '../orders/entities/order.entity';
 import { OrdersService } from '../orders/orders.service';
 import { EmailService } from '../email/email.service';
 
@@ -21,7 +19,7 @@ export class VNPayService {
   constructor(
     @Inject(forwardRef(() => CheckoutService))
     private readonly checkoutService: CheckoutService,
-    @InjectRepository(Order)
+
     private readonly ordersService: OrdersService,
 
     private readonly emailService: EmailService,
