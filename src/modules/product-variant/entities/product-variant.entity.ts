@@ -6,6 +6,7 @@ import {
   CreateDateColumn,
   Index,
   OneToMany,
+  DeleteDateColumn,
 } from 'typeorm';
 import { Product } from 'src/modules/product/entities/product.entity';
 import { CartItem } from 'src/modules/cartitem/entities/cartitem.entity';
@@ -36,6 +37,9 @@ export class ProductVariant {
 
   @CreateDateColumn()
   created_at: Date;
+
+  @DeleteDateColumn()
+  deletedAt: Date;
 
   @OneToMany(() => CartItem, (cartItem) => cartItem.product)
   cartItems: CartItem[]; // Mối quan hệ OneToMany với CartItem

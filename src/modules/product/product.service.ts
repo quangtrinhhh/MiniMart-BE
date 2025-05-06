@@ -34,6 +34,7 @@ import { ProductAttribute } from '../product-attribute/entities/product-attribut
 import { ProductFilterDto } from './dto/ProductFilterDto.dto';
 import { plainToInstance } from 'class-transformer';
 import { ProductDetailDto } from './dto/product.dto';
+import { SuggestProductDto } from './dto/suggest-product.dto';
 
 @Injectable()
 export class ProductService {
@@ -290,7 +291,8 @@ export class ProductService {
       .leftJoinAndSelect('product.productCategories', 'productCategory')
       .leftJoinAndSelect('productCategory.category', 'category')
       .leftJoinAndSelect('product.assets', 'productAsset')
-      .leftJoinAndSelect('productAsset.asset', 'asset');
+      .leftJoinAndSelect('productAsset.asset', 'asset')
+      .where('product.deletedAt IS NULL');
 
     // Search keyword
     if (keyword?.trim()) {
@@ -329,9 +331,10 @@ export class ProductService {
 
     // Filter by categories
     if (categoryIds.length > 0) {
-      qb.andWhere('category.id IN (:...categoryIds)', {
-        categoryIds,
-      });
+      qb.andWhere(
+        `category.id IN (:...categoryIds) OR category.parent IN (:...categoryIds)`,
+        { categoryIds },
+      );
     }
 
     const sortMap: Record<string, { field: string; order: 'ASC' | 'DESC' }> = {
@@ -363,6 +366,54 @@ export class ProductService {
 
     // 4. Ghi dữ liệu vào Redis cache (ví dụ 300 giây = 5 phút)
     await this.redisService.set(cacheKey, response, 300);
+    return response;
+  }
+
+  // Hàm gợi ý sản phẩm bán chạy nhất hoặc ngẫu nhiên
+  async suggestProducts(filter: SuggestProductDto) {
+    const { limit } = filter;
+    const cacheKey = `products:suggestions:${limit}`;
+
+    // Kiểm tra cache Redis trước
+    const cachedResult = await this.redisService.get<Product[]>(cacheKey);
+    if (cachedResult) {
+      console.log('✅ Trả về dữ liệu từ cache Redis');
+      return cachedResult;
+    }
+
+    // Lấy sản phẩm bán chạy nhất (dựa trên số lượng bán)
+    const popularProducts = await this.productRepository
+      .createQueryBuilder('product')
+      .leftJoinAndSelect('product.variants', 'variant')
+      .leftJoinAndSelect('product.attributes', 'attributes')
+      .leftJoinAndSelect('product.productCategories', 'productCategory')
+      .leftJoinAndSelect('productCategory.category', 'category')
+      .leftJoinAndSelect('product.assets', 'productAsset')
+      .leftJoinAndSelect('productAsset.asset', 'asset')
+      .where('product.deletedAt IS NULL')
+      .orderBy('product.sold', 'DESC') // Giả sử có trường soldCount để lưu số lượng bán
+      .take(limit)
+      .getMany();
+
+    let products: Product[];
+
+    if (popularProducts.length > 0) {
+      products = popularProducts;
+    } else {
+      // Nếu không có sản phẩm bán chạy, lấy sản phẩm ngẫu nhiên
+      products = await this.productRepository
+        .createQueryBuilder('product')
+        .leftJoinAndSelect('product.productCategories', 'productCategory')
+        .leftJoinAndSelect('product.attributes', 'attributes')
+        .where('product.deletedAt IS NULL')
+        .orderBy('RANDOM()') // Sắp xếp ngẫu nhiên
+        .take(limit)
+        .getMany();
+    }
+    const response = { result: products };
+    // Lưu kết quả vào Redis để tối ưu hóa cho các lần yêu cầu sau
+    await this.redisService.set(cacheKey, response, 300); // 300 giây = 5 phút
+
     return response;
   }
 
@@ -435,57 +486,54 @@ export class ProductService {
     await queryRunner.startTransaction();
 
     try {
-      // ✅ Load sản phẩm cùng với tất cả các quan hệ liên quan
       const product = await queryRunner.manager.findOne(Product, {
         where: { id },
-        relations: ['variants', 'assets', 'assets.asset'], // ❌ Bỏ 'variants.values'
+        relations: ['variants', 'assets', 'assets.asset'],
       });
 
       if (!product) {
         throw new BadRequestException('Không tìm thấy sản phẩm để xóa');
       }
 
-      // ✅ Xóa tất cả ProductVariant liên quan
-      const variantIds = product.variants.map((variant) => variant.id);
+      // ✅ Soft delete các entity con (nếu có soft delete)
+      const variantIds = product.variants.map((v) => v.id);
       if (variantIds.length > 0) {
-        await queryRunner.manager.delete(ProductVariant, variantIds);
+        await queryRunner.manager.softDelete(ProductVariant, variantIds);
       }
 
-      // ✅ Xóa tất cả ProductAsset liên quan
       const productAssetIds = product.assets.map((pa) => pa.id);
       if (productAssetIds.length > 0) {
-        await queryRunner.manager.delete(ProductAsset, productAssetIds);
-
-        // ✅ Xóa tất cả Asset liên quan
+        await queryRunner.manager.softDelete(ProductAsset, productAssetIds);
         const assetIds = product.assets.map((pa) => pa.asset.id);
         if (assetIds.length > 0) {
-          await queryRunner.manager.delete(Asset, assetIds);
+          await queryRunner.manager.softDelete(Asset, assetIds);
         }
       }
 
-      // ✅ Xóa sản phẩm chính
-      await queryRunner.manager.delete(Product, id);
+      // ✅ Soft delete sản phẩm chính
+      await queryRunner.manager.softDelete(Product, id);
+
       await this.invalidateProductCaches(product);
-      // ✅ Commit transaction
       await queryRunner.commitTransaction();
-      const cacheKey = `product:${product.slug}`; // Chỉ xóa cache của sản phẩm theo slug
+
+      const cacheKey = `product:${product.slug}`;
       await this.redisService.del(cacheKey);
-      // Xóa cache liên quan đến sản phẩm
-      const cacheKeyPattern = `products:*`; // Sử dụng pattern để tìm kiếm các cache liên quan đến sản phẩm
-      const cacheKeys = await this.redisService.scanKeys(cacheKeyPattern);
+
+      const cacheKeys = await this.redisService.scanKeys(`products:*`);
       for (const key of cacheKeys) {
         await this.redisService.del(key);
       }
 
-      return { message: `Xóa thành công sản phẩm: ${product.name}` };
+      return { message: `Ẩn sản phẩm thành công: ${product.name}` };
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      console.error('❌ Lỗi khi xóa sản phẩm:', error);
-      throw new BadRequestException(`Lỗi khi xóa sản phẩm: ${error}`);
+      console.error('❌ Lỗi khi ẩn sản phẩm:', error);
+      throw new BadRequestException(`Lỗi khi ẩn sản phẩm: ${error}`);
     } finally {
       await queryRunner.release();
     }
   }
+
   async searchProducts(keyword: string): Promise<Product[]> {
     return this.productRepository
       .createQueryBuilder('product')
@@ -505,7 +553,7 @@ export class ProductService {
     if (cached) return cached;
 
     const discountedProducts = await this.productRepository.find({
-      where: { discount: MoreThan(0) },
+      where: { discount: MoreThan(0), deletedAt: undefined },
       order: { discount: 'DESC' },
       take: limit,
       relations: ['variants'],

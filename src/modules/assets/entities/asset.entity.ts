@@ -4,6 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  DeleteDateColumn,
 } from 'typeorm';
 
 @Entity('assets') // Tên bảng trong database
@@ -25,6 +26,9 @@ export class Asset {
 
   @CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;
+
+  @DeleteDateColumn()
+  deletedAt: Date;
 
   @UpdateDateColumn({
     type: 'timestamp',

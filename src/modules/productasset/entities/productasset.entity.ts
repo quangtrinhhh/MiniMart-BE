@@ -6,6 +6,7 @@ import {
   Column,
   ManyToOne,
   JoinColumn,
+  DeleteDateColumn,
 } from 'typeorm';
 
 @Entity('product_asset') // Tên bảng trong database
@@ -23,4 +24,7 @@ export class ProductAsset {
   @ManyToOne(() => Product, (product) => product.id)
   @JoinColumn({ name: 'Product_id' })
   product: Product;
+
+  @DeleteDateColumn()
+  deletedAt: Date;
 }

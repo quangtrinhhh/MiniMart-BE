@@ -221,7 +221,6 @@ export class CategoryService {
       return cachedResult;
     }
     const resultCategory = await this.categoryRepository.find({
-      where: { parent: IsNull() },
       relations: ['children'],
       order: { created_at: 'DESC' },
       select: ['id', 'name', 'slug', 'image'],

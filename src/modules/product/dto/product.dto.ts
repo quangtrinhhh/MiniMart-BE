@@ -8,6 +8,7 @@ export class ProductDetailDto {
   @Expose() id: number;
   @Expose() name: string;
   @Expose() price: number;
+  @Expose() price_old: number;
   @Expose() slug: string;
   @Expose() description: string;
   @Expose() discount: number;

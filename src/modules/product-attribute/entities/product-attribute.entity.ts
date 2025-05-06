@@ -5,6 +5,7 @@ import {
   Column,
   ManyToOne,
   CreateDateColumn,
+  DeleteDateColumn,
 } from 'typeorm';
 
 @Entity('product_attributes')
@@ -25,4 +26,7 @@ export class ProductAttribute {
 
   @CreateDateColumn()
   created_at: Date;
+
+  @DeleteDateColumn()
+  deletedAt: Date;
 }

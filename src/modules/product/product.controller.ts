@@ -17,6 +17,7 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { Public } from 'src/decorator/customize';
 import { ProductFilterDto } from './dto/ProductFilterDto.dto';
+import { SuggestProductDto } from './dto/suggest-product.dto';
 
 @Controller('products')
 export class ProductController {
@@ -56,6 +57,12 @@ export class ProductController {
     @Query() filter: ProductFilterDto,
   ) {
     return await this.productService.getProductBySlugCategory(slug, filter);
+  }
+
+  @Public()
+  @Get('suggestions')
+  async getSuggestedProducts(@Query() filter: SuggestProductDto) {
+    return this.productService.suggestProducts(filter);
   }
   /******************************************************************* */
   @UseInterceptors(FilesInterceptor('images', 5))
