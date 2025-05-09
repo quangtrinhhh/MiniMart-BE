@@ -17,6 +17,8 @@ import {
 } from 'src/common/enums/order-status.enum';
 import { ProductService } from '../product/product.service';
 import { CreateCheckoutDto } from '../checkout/dto/create-checkout.dto';
+import { Product } from '../product/entities/product.entity';
+import { ProductVariant } from '../product-variant/entities/product-variant.entity';
 
 @Injectable()
 export class OrdersService {
@@ -43,7 +45,6 @@ export class OrdersService {
       0,
     );
 
-    // Tạo đơn hàng mới
     const order = this.orderRepository.create({
       user: { id: userId },
       status: OrderStatus.PENDING,
@@ -56,13 +57,9 @@ export class OrdersService {
       total: calculatedTotal,
     });
 
-    // Đảm bảo bạn sử dụng await để lấy đối tượng Order thực tế
     const savedOrder = await transactionalEntityManager.save(order);
+    const orderItems: OrderItem[] = [];
 
-    // Khai báo orderItems với kiểu đúng
-    const orderItems: OrderItem[] = []; // Khai báo đúng kiểu mảng OrderItem
-
-    // Xử lý từng sản phẩm trong giỏ hàng
     for (const item of cart.cartItems) {
       if (!item.product) {
         throw new BadRequestException(
@@ -70,53 +67,67 @@ export class OrdersService {
         );
       }
 
-      const product = await this.productService.findOneById(item.product.id);
+      // Lấy sản phẩm từ transactionalEntityManager
+      const product = await transactionalEntityManager.findOne(Product, {
+        where: { id: item.product.id },
+        relations: ['variants'],
+      });
 
-      // Kiểm tra số lượng tồn kho của sản phẩm hoặc biến thể
-      const productVariant = item.variant
-        ? product.variants.find((v) => v.id === item.variant?.id)
-        : null;
+      if (!product) throw new BadRequestException('Product not found');
 
-      if (
-        (productVariant && productVariant.stock < item.quantity) ||
-        (productVariant === null && product.stock < item.quantity)
-      ) {
+      let productVariant: ProductVariant | null = null;
+
+      if (item.variant?.id) {
+        productVariant =
+          product.variants.find((v) => v.id === item.variant?.id) || null;
+
+        if (!productVariant) {
+          throw new BadRequestException(`Không tìm thấy biến thể sản phẩm`);
+        }
+
+        if (productVariant.stock < item.quantity) {
+          throw new BadRequestException(
+            `Không đủ hàng tồn cho biến thể sản phẩm`,
+          );
+        }
+
+        productVariant.stock -= item.quantity;
+        await transactionalEntityManager.save(productVariant);
+      }
+
+      if (product.stock < item.quantity) {
         throw new BadRequestException(
-          `Không đủ số lượng cho sản phẩm ${product.name}`,
+          `Không đủ hàng tồn cho sản phẩm ${product.name}`,
         );
       }
 
-      // Cập nhật tồn kho
-      if (productVariant) {
-        productVariant.stock -= item.quantity;
-        await transactionalEntityManager.save(productVariant);
-      } else {
-        product.stock -= item.quantity;
-        await transactionalEntityManager.save(product);
-      }
+      product.stock -= item.quantity;
+      product.sold += item.quantity;
+      await transactionalEntityManager.save(product);
 
-      // Lưu thông tin đơn hàng
       const imagePath = item.product.assets?.[0]?.asset?.path || null;
+
       const orderItem = this.orderItemRepository.create({
         order: savedOrder,
         product,
         quantity: item.quantity,
         price: item.price,
-        name: item.product.name,
+        name: product.name,
         image: imagePath,
-        variant: item.variant ?? undefined,
+        variant: productVariant ?? undefined,
       });
-
       const savedOrderItem = await transactionalEntityManager.save(orderItem);
-
-      // Thêm orderItem đã lưu vào danh sách orderItems
-      orderItems.push(savedOrderItem); // Không còn lỗi nữa vì khai báo đúng kiểu
+      orderItems.push(savedOrderItem);
     }
 
-    // Cập nhật lại order để trả về cả orderItems
     savedOrder.orderItems = orderItems;
-
-    // Trả về cả đơn hàng và orderItems
+    for (const item of savedOrder.orderItems) {
+      await this.productService.invalidateProductCaches(
+        item.product,
+        item.product.slug,
+        item.product.discount,
+      );
+    }
     return savedOrder;
   }
 
@@ -133,42 +144,53 @@ export class OrdersService {
       .getMany();
   }
 
-  async cancelOrder(userId: number, orderId: number): Promise<Order> {
+  async cancelOrder(userId: number, orderId: number) {
     return await this.dataSource.transaction(async (manager) => {
-      // Lấy đơn hàng và khóa bảng Order
-      console.log(orderId, userId);
+      // Lấy thông tin user
+      const user = await this.usersService.findOne(userId);
+      if (!user) {
+        throw new NotFoundException('Người dùng không tồn tại');
+      }
 
-      const order = await manager.findOne(Order, {
-        where: { id: orderId, user: { id: userId } },
-        relations: ['orderItems', 'orderItems.product'],
-        lock: { mode: 'pessimistic_write', tables: ['order'] }, // Chỉ khóa bảng Order
-      });
+      const isAdmin = user.role === RoleEnum.ADMIN;
+
+      // Truy vấn đơn hàng và khóa bảng Order
+      const order = await manager
+        .getRepository(Order)
+        .createQueryBuilder('order')
+        .setLock('pessimistic_write') // Chỉ khóa bảng Order
+        .where('order.id = :orderId', { orderId })
+        .andWhere(isAdmin ? '1=1' : 'order.userId = :userId', { userId }) // Nếu không phải admin thì chỉ lấy đơn hàng của người dùng đó
+        .getOne();
 
       if (!order) {
-        throw new NotFoundException('Order not found');
+        throw new NotFoundException(
+          'Đơn hàng không tồn tại hoặc bạn không có quyền hủy',
+        );
       }
 
       if (order.status !== OrderStatus.PENDING) {
-        throw new BadRequestException('Only pending orders can be canceled');
+        throw new BadRequestException(
+          'Chỉ đơn hàng đang chờ xử lý mới được hủy',
+        );
       }
 
-      // Cập nhật trạng thái đơn hàng
+      // Cập nhật trạng thái đơn hàng thành hủy
       order.status = OrderStatus.CANCELED;
       order.canceled_at = new Date();
       await manager.save(order);
-
-      // Hoàn lại số lượng hàng tồn kho
-      const stockUpdatePromises = order.orderItems.map((item) =>
-        this.productService.updateProductStock(item.product.id, item.quantity),
-      );
-      await Promise.all(stockUpdatePromises);
-
-      // Nếu đơn hàng đã thanh toán, xử lý hoàn tiền (bỏ comment khi cần)
-      // if (order.payment_status === PaymentStatus.PAID) {
-      //   await this.paymentService.refund(order);
-      // }
-
-      return order;
+      if (order.orderItems && order.orderItems.length > 0) {
+        await Promise.all(
+          order.orderItems.map((item) =>
+            this.productService.updateProductStock(
+              item.product.id,
+              item.quantity,
+            ),
+          ),
+        );
+      }
+      // Trả về thông báo thành công
+      return { message: 'Đơn hàng đã được hủy thành công' };
     });
   }
 

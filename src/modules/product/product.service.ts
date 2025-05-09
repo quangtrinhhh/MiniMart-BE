@@ -648,15 +648,17 @@ export class ProductService {
         throw new Error(`Product with ID ${productId} not found.`);
       }
 
-      // Kiểm tra nếu số lượng kho của sản phẩm chính đủ để giảm
+      // Kiểm tra nếu số lượng kho của sản phẩm chính đủ để cộng lại
+      // Đảm bảo không để kho âm
       if (product.stock + quantity < 0) {
         throw new Error(`Insufficient stock for product ${productId}`);
       }
 
       // Cập nhật kho của sản phẩm chính
-      product.sold -= quantity;
-      product.stock += quantity;
+      product.sold -= quantity; // Nếu muốn giảm số lượng đã bán khi hủy, bỏ qua nếu không cần.
+      product.stock += quantity; // Cộng lại số lượng vào kho
       await manager.save(product);
+      console.log('Cập nhật kho sản phẩm chính:', product);
 
       // Cập nhật kho của các biến thể (nếu có)
       if (product.variants.length > 0) {
@@ -666,12 +668,15 @@ export class ProductService {
           }
 
           // Cập nhật kho của biến thể
-          variant.stock += quantity;
+          variant.stock += quantity; // Cộng lại số lượng vào kho
           await manager.save(variant);
         }
       }
+
+      await this.invalidateProductCaches(product);
     });
   }
+
   //
   async getProductBySlugCategory(slug: string, filter: ProductFilterDto) {
     const category = await this.categoryService.findOneSlug(slug);
