@@ -638,6 +638,10 @@ export class ProductService {
 
   // Cập nhật tồn kho của sản phẩm
   async updateProductStock(productId: number, quantity: number): Promise<void> {
+    console.log(
+      `Called updateProductStock with productId=${productId}, quantity=${quantity}`,
+    );
+
     await this.dataSource.transaction(async (manager: EntityManager) => {
       const product = await manager.findOne(Product, {
         where: { id: productId },
@@ -648,32 +652,34 @@ export class ProductService {
         throw new Error(`Product with ID ${productId} not found.`);
       }
 
-      // Kiểm tra nếu số lượng kho của sản phẩm chính đủ để cộng lại
-      // Đảm bảo không để kho âm
+      // Đảm bảo không bị âm kho
       if (product.stock + quantity < 0) {
         throw new Error(`Insufficient stock for product ${productId}`);
       }
 
-      // Cập nhật kho của sản phẩm chính
-      product.sold -= quantity; // Nếu muốn giảm số lượng đã bán khi hủy, bỏ qua nếu không cần.
-      product.stock += quantity; // Cộng lại số lượng vào kho
+      // Cập nhật stock và sold
+      product.stock += quantity;
+      product.sold = Math.max(0, product.sold - Math.abs(quantity));
       await manager.save(product);
-      console.log('Cập nhật kho sản phẩm chính:', product);
+      console.log(
+        `Updated main product stock: ${product.stock}, sold: ${product.sold}`,
+      );
 
-      // Cập nhật kho của các biến thể (nếu có)
-      if (product.variants.length > 0) {
+      // Cập nhật kho các biến thể (nếu có)
+      if (Array.isArray(product.variants) && product.variants.length > 0) {
         for (const variant of product.variants) {
           if (variant.stock + quantity < 0) {
             throw new Error(`Insufficient stock for variant ${variant.id}`);
           }
 
-          // Cập nhật kho của biến thể
-          variant.stock += quantity; // Cộng lại số lượng vào kho
+          variant.stock += quantity;
           await manager.save(variant);
+          console.log(`Updated variant ${variant.id} stock: ${variant.stock}`);
         }
       }
 
       await this.invalidateProductCaches(product);
+      console.log(`Cache invalidated for product ${productId}`);
     });
   }
 

@@ -16,7 +16,11 @@ async function bootstrap() {
     }),
   );
   app.enableCors({
-    origin: `${process.env.DOMAIN_FE}`,
+    origin: [
+      `${process.env.DOMAIN_FE}`,
+      'http://localhost:3000', // Thêm các domain khác nếu cần
+      `${process.env.DOMAIN_PRODUCTION}`, // Thêm nhiều domain khác nữa
+    ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     preflightContinue: false,
     credentials: true,

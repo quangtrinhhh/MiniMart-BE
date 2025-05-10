@@ -55,7 +55,6 @@ export class ImageUploadService {
 
     // Tạo hash từ file để kiểm tra cache
     const fileHash = crypto.createHash('md5').update(file.buffer).digest('hex');
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     const cachedImage = (await this.cacheManager.get<string>(fileHash)) ?? null;
 
     if (cachedImage) {
@@ -102,7 +101,7 @@ export class ImageUploadService {
       }
 
       // Lưu cache
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+
       await this.cacheManager.set(
         fileHash,
         JSON.stringify(response.data.data),
