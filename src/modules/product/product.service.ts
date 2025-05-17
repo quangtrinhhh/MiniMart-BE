@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -157,7 +158,7 @@ export class ProductService {
   async update(
     id: number,
     updateProductDto: UpdateProductDto,
-    file?: Express.Multer.File,
+    files?: Express.Multer.File[],
   ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -190,7 +191,13 @@ export class ProductService {
         categoryIdForSKU,
       );
       await this.updateProductAttributes(queryRunner, product, attributes);
-      await this.updateProductImage(queryRunner, product, file);
+
+      await this.updateProductImage(
+        queryRunner,
+        product,
+        files,
+        updateProductDto.deletedImageIds,
+      );
 
       await queryRunner.commitTransaction();
       await this.invalidateProductCaches(
@@ -889,37 +896,46 @@ export class ProductService {
       }
     }
   }
-
-  private async updateProductImage(
+  async updateProductImage(
     queryRunner: QueryRunner,
     product: Product,
-    file?: Express.Multer.File,
+    files?: Express.Multer.File[],
+    deletedImageIds?: number[],
   ) {
-    if (!file) return;
-
-    const existingAsset = product.assets[0]?.asset;
-    if (!existingAsset || file.originalname !== existingAsset.filename) {
-      if (existingAsset) {
-        await queryRunner.manager.delete(Asset, existingAsset.id);
+    try {
+      if (deletedImageIds && deletedImageIds.length > 0) {
+        await queryRunner.manager.delete(ProductAsset, {
+          product: { id: product.id },
+          asset: { id: In(deletedImageIds) },
+        });
+        await queryRunner.manager.delete(Asset, deletedImageIds);
       }
 
-      const { link, type, size } =
-        await this.imageUploadService.uploadImage(file);
+      if (files && files.length > 0) {
+        for (const file of files) {
+          const { link, type, size } =
+            await this.imageUploadService.uploadImage(file);
 
-      const newAsset = queryRunner.manager.create(Asset, {
-        filename: file.originalname,
-        path: link,
-        type,
-        size,
-      });
-      await queryRunner.manager.save(newAsset);
+          const newAsset = queryRunner.manager.create(Asset, {
+            filename: file.originalname,
+            path: link,
+            type,
+            size,
+          });
+          await queryRunner.manager.save(newAsset);
 
-      const newProductAsset = queryRunner.manager.create(ProductAsset, {
-        product,
-        asset: newAsset,
-        type: 'gallery',
-      });
-      await queryRunner.manager.save(newProductAsset);
+          const newProductAsset = queryRunner.manager.create(ProductAsset, {
+            product,
+            asset: newAsset,
+            type: 'gallery',
+          });
+          await queryRunner.manager.save(newProductAsset);
+        }
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (error) {
+      // Ném lỗi để hàm gọi bên ngoài xử lý rollback
+      throw new InternalServerErrorException('Cập nhật ảnh sản phẩm thất bại');
     }
   }
 
@@ -927,29 +943,67 @@ export class ProductService {
     queryRunner: QueryRunner,
     product: Product,
     attributes: UpdateProductAttributeDto[] = [],
-  ) {
+  ): Promise<void> {
     const repo = queryRunner.manager.getRepository(ProductAttribute);
-    const existing = product.attributes;
-    const existingKeyMap = new Map(
-      existing.map((a) => [`${a.name}:${a.value}`, a]),
-    );
-    const incomingKeyMap = new Map(
-      attributes.map((a) => [`${a.name}:${a.value}`, a]),
+
+    // Lấy danh sách thuộc tính hiện có của sản phẩm (đã được load sẵn)
+    const existingAttrs = product.attributes || [];
+
+    // Tạo Map để dễ dàng lookup thuộc tính theo id
+    const existingMap = new Map<number, ProductAttribute>(
+      existingAttrs
+        .filter((attr) => attr.id != null)
+        .map((attr) => [attr.id, attr]),
     );
 
-    const toRemove = existing.filter(
-      (a) => !incomingKeyMap.has(`${a.name}:${a.value}`),
+    // Tập hợp id thuộc tính trong dữ liệu mới gửi lên (incoming)
+    const incomingIds = new Set<number>(
+      attributes
+        .filter((attr) => attr.id != null)
+        .map((attr) => attr.id as number),
     );
+
+    // 1. Xóa thuộc tính cũ không còn xuất hiện trong dữ liệu mới
+    const toRemove = existingAttrs.filter((attr) => !incomingIds.has(attr.id));
     if (toRemove.length > 0) {
       await repo.remove(toRemove);
     }
 
-    const toAdd = attributes.filter(
-      (a) => !existingKeyMap.has(`${a.name}:${a.value}`),
-    );
+    // 2. Cập nhật các thuộc tính có id, chỉ khi dữ liệu thay đổi
+    for (const attrDto of attributes) {
+      if (attrDto.id && existingMap.has(attrDto.id)) {
+        const existingAttr = existingMap.get(attrDto.id)!;
+        let changed = false;
+
+        if (attrDto.name !== undefined && attrDto.name !== existingAttr.name) {
+          existingAttr.name = attrDto.name;
+          changed = true;
+        }
+        if (
+          attrDto.value !== undefined &&
+          attrDto.value !== existingAttr.value
+        ) {
+          existingAttr.value = attrDto.value;
+          changed = true;
+        }
+
+        if (changed) {
+          await repo.save(existingAttr);
+        }
+      }
+    }
+
+    // 3. Thêm mới các thuộc tính không có id (mới hoàn toàn)
+    const toAdd = attributes.filter((attr) => !attr.id);
     if (toAdd.length > 0) {
-      const newAttrs = toAdd.map((a) => repo.create({ product, ...a }));
-      await repo.save(newAttrs);
+      const newEntities = toAdd.map((attrDto) =>
+        repo.create({
+          product,
+          name: attrDto.name,
+          value: attrDto.value,
+        }),
+      );
+      await repo.save(newEntities);
     }
   }
 }

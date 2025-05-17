@@ -6,7 +6,6 @@ import {
   Patch,
   Param,
   Delete,
-  UploadedFile,
   UseInterceptors,
   Query,
   UploadedFiles,
@@ -14,7 +13,7 @@ import {
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { Public } from 'src/decorator/customize';
 import { ProductFilterDto } from './dto/ProductFilterDto.dto';
 import { SuggestProductDto } from './dto/suggest-product.dto';
@@ -94,14 +93,16 @@ export class ProductController {
     return this.productService.findOne(slug);
   }
 
-  @UseInterceptors(FileInterceptor('image'))
+  @UseInterceptors(FilesInterceptor('images'))
   @Patch(':id')
   update(
     @Param('id') id: string,
     @Body() updateProductDto: UpdateProductDto,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFiles() files: Express.Multer.File[], // nhận nhiều file
   ) {
-    return this.productService.update(+id, updateProductDto, file);
+    console.log(files, updateProductDto);
+
+    return this.productService.update(+id, updateProductDto, files);
   }
 
   @Delete(':id')

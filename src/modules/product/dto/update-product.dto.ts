@@ -56,6 +56,11 @@ export class UpdateProductDto {
   @IsOptional()
   price?: number;
 
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  price_old?: number;
+
   @IsString()
   @IsOptional()
   description?: string;
@@ -101,6 +106,12 @@ export class UpdateProductDto {
   @Type(() => UpdateProductAttributeDto)
   @IsOptional()
   attributes?: UpdateProductAttributeDto[];
+
+  @IsOptional()
+  @IsArray()
+  @Type(() => Number)
+  @IsNumber({}, { each: true })
+  deletedImageIds?: number[];
 }
 export class UpdateProductAttributeDto {
   @IsOptional()
