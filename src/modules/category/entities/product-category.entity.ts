@@ -9,6 +9,7 @@ export class ProductCategory {
 
   @ManyToOne(() => Product, (product) => product.productCategories, {
     onDelete: 'CASCADE',
+    eager: true,
   })
   @JoinColumn({ name: 'product_id' })
   product: Product;

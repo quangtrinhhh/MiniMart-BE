@@ -572,24 +572,24 @@ export class ProductService {
     return result;
   }
 
-  async getProductsByCategory(categoryId: number) {
-    // Lấy danh sách category con nếu categoryId là cha
-    const category = await this.categoryRepository.findOne({
-      where: { id: categoryId },
+  async getProductsByCategory(parentCategoryId: number) {
+    // 1. Tìm danh mục cha và các danh mục con
+    const parentCategory = await this.categoryRepository.findOne({
+      where: { id: parentCategoryId },
       relations: ['children'],
     });
 
-    // Nếu danh mục cha không có con, trả về rỗng
-    if (!category || category.children.length === 0) {
+    // 2. Nếu không có danh mục cha hoặc không có danh mục con ➜ Trả về rỗng
+    if (!parentCategory || parentCategory.children.length === 0) {
       return { result: [] };
     }
 
-    // Lấy danh sách ID của danh mục con
-    const categoryIds = category.children.map((child) => child.id);
+    // 3. Lấy ID của các danh mục con
+    const subcategoryIds = parentCategory.children.map((child) => child.id);
 
-    // Lấy tất cả danh mục con cùng với sản phẩm của chúng
-    const categoriesWithProducts = await this.categoryRepository.find({
-      where: { id: In(categoryIds) }, // Chỉ lấy danh mục con
+    // 4. Truy vấn danh mục con kèm sản phẩm
+    const subcategoriesWithProducts = await this.categoryRepository.find({
+      where: { id: In(subcategoryIds) },
       relations: [
         'productCategories',
         'productCategories.product',
@@ -598,13 +598,13 @@ export class ProductService {
       ],
     });
 
-    // Định dạng dữ liệu đầu ra
-    const result = categoriesWithProducts.map((category) => ({
-      categoryId: category.id,
-      categoryName: category.name,
-      products: category.productCategories.map((pc) => ({
-        ...pc,
-      })),
+    // 5. Định dạng kết quả trả về
+    const result = subcategoriesWithProducts.map((subcategory) => ({
+      categoryId: subcategory.id,
+      categoryName: subcategory.name,
+      products: subcategory.productCategories
+        .map((pc) => pc.product)
+        .filter((product) => product !== null), // loại bỏ product null nếu có
     }));
 
     return { result };

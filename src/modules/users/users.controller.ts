@@ -11,6 +11,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { GetUser } from 'src/decorator/user.decorator';
 
 @Controller('users')
 export class UsersController {
@@ -30,9 +31,9 @@ export class UsersController {
     return this.usersService.findAll(query, +current, +pageSize);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.usersService.findOne(+id);
+  @Get('profile')
+  findOne(@GetUser('_id') userId: number) {
+    return this.usersService.findOne(+userId);
   }
 
   // @Patch(':id')

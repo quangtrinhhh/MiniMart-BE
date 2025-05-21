@@ -152,7 +152,7 @@ export class OrdersService {
         throw new NotFoundException('Người dùng không tồn tại');
       }
 
-      const isAdmin = user.role === RoleEnum.ADMIN;
+      const isAdmin = (user.role as RoleEnum) === RoleEnum.ADMIN;
 
       // Truy vấn đơn hàng và khóa bảng Order
       const order = await manager
@@ -201,7 +201,7 @@ export class OrdersService {
   ): Promise<void> {
     const user = await this.usersService.findOne(userId);
     if (!user) throw new NotFoundException('User không tồn tại');
-    if (user.role != RoleEnum.ADMIN)
+    if ((user.role as RoleEnum) !== RoleEnum.ADMIN)
       throw new NotFoundException('Bạn ko có quyền');
     const order = await this.orderRepository.findOne({
       where: { id: orderId },
@@ -240,7 +240,7 @@ export class OrdersService {
       .orderBy('o.created_at', 'DESC');
 
     // Nếu không phải admin, chỉ lấy đơn hàng của user đó
-    if (user.role !== RoleEnum.ADMIN) {
+    if ((user.role as RoleEnum) !== RoleEnum.ADMIN) {
       query.where('o.Users_id = :userId', { userId });
     }
 

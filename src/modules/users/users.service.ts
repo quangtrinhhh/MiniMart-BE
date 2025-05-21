@@ -16,6 +16,7 @@ import { MailerService } from '@nestjs-modules/mailer';
 import aqp from 'api-query-params';
 import { plainToInstance } from 'class-transformer';
 import { RoleEnum } from 'src/common/enums/role.enum';
+import { UserDto } from './dto/user.dto';
 
 @Injectable()
 export class UsersService {
@@ -104,7 +105,7 @@ export class UsersService {
     const user = await this.userRepository.findOne({
       where: { id: Number(id) },
     });
-    return user;
+    return plainToInstance(UserDto, user, { excludeExtraneousValues: true });
   }
 
   // async update(id: number, updateUserDto: UpdateUserDto) {

@@ -41,9 +41,13 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { VNPayModule } from './modules/vnpay/vnpay.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { RedisModule } from './modules/redis/redis.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true, // Đảm bảo có thể dùng ở mọi nơi
+    }),
     TypeOrmModule.forRoot(databaseConfig()),
     TypeOrmModule.forFeature([
       Coupon,

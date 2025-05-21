@@ -6,6 +6,7 @@ import {
   ParseIntPipe,
   // Post,
   Put,
+  Query,
   // Req,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
@@ -41,5 +42,33 @@ export class OrdersController {
     @Param('orderId', ParseIntPipe) orderId: number,
   ) {
     return this.ordersService.cancelOrder(userId, orderId);
+  }
+  @Get('revenue/daily')
+  getDaily(@Query() query: { startDate: string; endDate: string }) {
+    return this.ordersService.getDailyRevenue(
+      new Date(query.startDate),
+      new Date(query.endDate),
+    );
+  }
+
+  @Get('revenue/weekly')
+  getWeekly(@Query() query: { startDate: string; endDate: string }) {
+    return this.ordersService.getWeeklyRevenue(
+      new Date(query.startDate),
+      new Date(query.endDate),
+    );
+  }
+
+  @Get('revenue/monthly')
+  getMonthly(@Query() query: { startDate: string; endDate: string }) {
+    return this.ordersService.getMonthlyRevenue(
+      new Date(query.startDate),
+      new Date(query.endDate),
+    );
+  }
+
+  @Get('revenue/yearly')
+  getYearly(@Query() query: { startYear: number; endYear: number }) {
+    return this.ordersService.getYearlyRevenue(query.startYear, query.endYear);
   }
 }
