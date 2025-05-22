@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
   UploadedFiles,
+  SetMetadata,
 } from '@nestjs/common';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -19,7 +20,7 @@ import { RolesGuard } from 'src/auth/passport/roles.guard';
 import { Roles } from 'src/decorator/roles.decorator';
 import { RoleEnum } from 'src/common/enums/role.enum';
 import { JwtAuthGuard } from 'src/auth/passport/jwt-auth.guard';
-import { Public } from 'src/decorator/customize';
+import { Public, RESPONSE_MESSAGE } from 'src/decorator/customize';
 
 @Controller('category')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -50,6 +51,7 @@ export class CategoryController {
 
   @Public()
   @Get()
+  @SetMetadata(RESPONSE_MESSAGE, 'Lấy danh sách categorys thành công')
   findAll(
     @Query() query: string,
     @Query('current') current: string,

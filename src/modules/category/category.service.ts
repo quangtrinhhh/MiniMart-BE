@@ -94,8 +94,8 @@ export class CategoryService {
     }
 
     // Đếm tổng số danh mục phù hợp
-    const totalItems = await this.categoryRepository.count({ where });
-    const totalPages = Math.ceil(totalItems / pageSize);
+    const totalItem = await this.categoryRepository.count({ where });
+    const totalPages = Math.ceil(totalItem / pageSize);
 
     // Lấy danh sách danh mục gốc kèm danh mục con
     const result = await this.categoryRepository.find({
@@ -107,9 +107,11 @@ export class CategoryService {
     });
 
     return {
-      result,
-      totalItems,
-      totalPages,
+      data: result,
+      meta: {
+        total: totalItem,
+        page: totalPages,
+      },
     };
   }
 

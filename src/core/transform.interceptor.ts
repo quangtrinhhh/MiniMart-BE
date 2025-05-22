@@ -5,33 +5,62 @@ import {
   CallHandler,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { response } from 'express';
+import { Response as ExpressResponse } from 'express';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { RESPONSE_MESSAGE } from 'src/decorator/customize';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export interface Response<T> {
+
+export interface ApiResponse<T, M = undefined> {
   statusCode: number;
   message?: string;
-  data: any;
+  data: T;
+  meta?: M;
 }
+
+type MaybeWithMeta<T, M> = T | { data: T; meta: M };
+
 @Injectable()
-export class TransformInterceptor<T>
-  implements NestInterceptor<T, Response<T>>
+export class TransformInterceptor<T, M = undefined>
+  implements NestInterceptor<MaybeWithMeta<T, M>, ApiResponse<T, M>>
 {
-  constructor(private reflector: Reflector) {}
+  constructor(private readonly reflector: Reflector) {}
+
   intercept(
     context: ExecutionContext,
     next: CallHandler,
-  ): Observable<Response<T>> {
-    return next.handle().pipe(
-      map((data) => ({
-        statusCode: response.statusCode,
-        message:
-          this.reflector.get<string>(RESPONSE_MESSAGE, context.getHandler()) ||
-          '',
-        data: data as T,
-      })),
-    );
+  ): Observable<ApiResponse<T, M>> {
+    const response = context.switchToHttp().getResponse<ExpressResponse>();
+    const message =
+      this.reflector.get<string>(RESPONSE_MESSAGE, context.getHandler()) || '';
+
+    return next
+      .handle()
+      .pipe(
+        map((result: MaybeWithMeta<T, M>) =>
+          this.transformResponse(result, response.statusCode, message),
+        ),
+      );
+  }
+
+  private transformResponse(
+    result: MaybeWithMeta<T, M>,
+    statusCode: number,
+    message: string,
+  ): ApiResponse<T, M> {
+    if (
+      typeof result === 'object' &&
+      result !== null &&
+      'data' in result &&
+      'meta' in result
+    ) {
+      const { data, meta } = result as { data: T; meta: M };
+      return { statusCode, message, data, meta };
+    }
+
+    return {
+      statusCode,
+      message,
+      data: result,
+    };
   }
 }

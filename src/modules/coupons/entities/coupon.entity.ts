@@ -32,7 +32,7 @@ export class Coupon {
   })
   coupon_type: CouponType;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   coupon_value: number;
 
   @Column({ type: 'date' })
@@ -41,10 +41,10 @@ export class Coupon {
   @Column({ type: 'date' })
   coupon_end_date: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   coupon_min_spend: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   coupon_max_spend: number;
 
   @Column({ type: 'int' })
